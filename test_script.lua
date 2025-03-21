@@ -247,18 +247,18 @@ local function draw_seq(self)
     local text = ROOT_NAMES[(self.parameters[1] % 12) + 1] .. " " ..
                      SCALE_NAMES[self.parameters[2]]
     local gridX = 8;
-    local gridY = 25;
+    local gridY = 27;
     local cw = 11;
     local ch = 11;
 
-    drawText(gridX, 5, "Markov Chain Sequencer", 12)
+    drawText(gridX, 7, "Markov Chain Sequencer", 12)
 
     drawText(gridX, gridY - 10, text)
 
     for i = 1, NUM_STEPS do
         local x = gridX + ((i - 1) % 8) * cw
         local y = gridY + math.floor((i - 1) / 8) * ch
-        local bright = sequence[i].active == 1 and 12 or 2
+        local bright = sequence[i].active == 1 and 8 or 3
 
         if i == currentStep then bright = 15 end
 
@@ -266,14 +266,14 @@ local function draw_seq(self)
 
         if sequence[i].active == 1 then
             local ph = math.floor((127 - (sequence[i].pitch % 12) * 5) / 15)
-            drawLine(x + 2, y + ph, x + cw - 4, y + ph, 8)
+            drawLine(x + 2, y + ph, x + cw - 4, y + ph, 0)
         end
     end
-    drawText(gridX, gridY + 24, "Step: " .. currentStep .. "/" .. NUM_STEPS, 12)
+    drawText(gridX, gridY + 25, "Step: " .. currentStep .. "/" .. NUM_STEPS, 12)
 
-    drawText(123, gridY, "Mutation Rate: " .. self.parameters[6] .. "%", 12)
-    drawText(134, gridY + 8, "Emotion: " .. self.parameters[3] .. "%", 12)
-    drawText(130, gridY + 16, "Jumpiness: " .. self.parameters[5] .. "%", 12)
+    drawText(110, gridY - 5, "Mutation Rate: " .. self.parameters[6] .. "%", 12)
+    drawText(145, gridY + 5, "Emotion: " .. self.parameters[3] .. "%", 12)
+    drawText(133, gridY + 15, "Jumpiness: " .. self.parameters[5] .. "%", 12)
 
     -- Indicate that we want to draw the whole screen
     return true

@@ -12,7 +12,9 @@ local config = {
     scaling = 4,
     baseColor = {0, 1, 1}, -- Electric blue tint (R, G, B)
     canvas = nil,
-    brightnessExp = 0.85 -- Exponent for brightness curve (< 1 makes dim colors brighter)
+    brightnessExp = 0.85, -- Exponent for brightness curve (< 1 makes dim colors brighter)
+    pixelFont = nil, -- Will hold the PixelmixRegular font
+    tinyFont = nil -- Will hold the tom-thumb font
 }
 
 -- Shared color calculation function with non-linear brightness adjustment
@@ -36,6 +38,15 @@ function display.init(options)
 
     -- Configure default filters
     love.graphics.setDefaultFilter("nearest", "nearest")
+
+    -- Load the fonts
+    -- Regular font for drawText
+    config.pixelFont = love.graphics.newFont("fonts/PixelmixRegular-z07w.ttf",
+                                             8 * config.scaling)
+
+    -- font for drawTinyText (using BMFontRasterizer)
+    config.tinyFont = love.graphics.newFont("fonts/tom-thumb.ttf",
+                                            5 * config.scaling)
 
     -- Configure window if we're managing it
     if options and options.manageWindow then
@@ -104,7 +115,18 @@ end
 function display.drawText(x, y, text, color)
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
+
+    -- Save current font
+    local currentFont = love.graphics.getFont()
+
+    -- Use our pixel font
+    love.graphics.setFont(config.pixelFont)
+
+    -- Draw the text
     love.graphics.print(text, x * config.scaling, y * config.scaling)
+
+    -- Restore the previous font
+    love.graphics.setFont(currentFont)
 end
 
 -- Fill a rectangle
@@ -161,140 +183,22 @@ end
 -- Get the current configuration
 function display.getConfig() return config end
 
--- Draw text with tiny 3x5 pixel font
+-- Draw text with tiny font (using tom-thumb.bdf)
 function display.drawTinyText(x, y, text, color)
     local col = calculateColor(color or 15)
+    love.graphics.setColor(col[1], col[2], col[3])
 
-    -- Implementation of tiny 3x5 pixel font
-    love.graphics.push()
-    love.graphics.setColor(col[1], col[2], col[3]) -- White text
+    -- Save current font
+    local currentFont = love.graphics.getFont()
 
-    -- Use a low-resolution scale for tiny text
-    local scale = 1
-    local charWidth = 4 * scale -- 3 pixels + 1 pixel spacing
-    local charHeight = 5 * scale
+    -- Use our tiny font
+    love.graphics.setFont(config.tinyFont)
 
-    -- Define the tiny font as pixel patterns (1=pixel on, 0=pixel off)
-    local tinyFont = {
-        [" "] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        ["!"] = {0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0},
-        ['"'] = {1, 0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        ["#"] = {1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1},
-        ["$"] = {0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0},
-        ["%"] = {1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1},
-        ["&"] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1},
-        ["'"] = {0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        ["("] = {0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1},
-        [")"] = {1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0},
-        ["*"] = {0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0},
-        ["+"] = {0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0},
-        [","] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0},
-        ["-"] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0},
-        ["."] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0},
-        ["/"] = {0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0},
-        ["0"] = {0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["1"] = {0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1},
-        ["2"] = {1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1},
-        ["3"] = {1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0},
-        ["4"] = {1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1},
-        ["5"] = {1, 1, 1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 0},
-        ["6"] = {0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0},
-        ["7"] = {1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0},
-        ["8"] = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
-        ["9"] = {0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0},
-        [":"] = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
-        [";"] = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0},
-        ["<"] = {0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1},
-        ["="] = {0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0},
-        [">"] = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0},
-        ["?"] = {0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0},
-        ["@"] = {0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1},
-        ["A"] = {0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        ["B"] = {1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 0},
-        ["C"] = {0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1},
-        ["D"] = {1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0},
-        ["E"] = {1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1},
-        ["F"] = {1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 0},
-        ["G"] = {0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1},
-        ["H"] = {1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        ["I"] = {1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1},
-        ["J"] = {0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["K"] = {1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1},
-        ["L"] = {1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1},
-        ["M"] = {1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1},
-        ["N"] = {1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
-        ["O"] = {0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["P"] = {1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0},
-        ["Q"] = {0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1},
-        ["R"] = {1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1},
-        ["S"] = {0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0},
-        ["T"] = {1, 1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0},
-        ["U"] = {1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["V"] = {1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["W"] = {1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1},
-        ["X"] = {1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1},
-        ["Y"] = {1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0},
-        ["Z"] = {1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 1},
-        ["["] = {1, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0},
-        ["\\"] = {1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1},
-        ["]"] = {0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1},
-        ["^"] = {0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        ["_"] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1},
-        ["`"] = {1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-        ["a"] = {0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1},
-        ["b"] = {1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0},
-        ["c"] = {0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1},
-        ["d"] = {0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1},
-        ["e"] = {0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 1},
-        ["f"] = {0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0},
-        ["g"] = {0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0},
-        ["h"] = {1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1},
-        ["i"] = {0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1},
-        ["j"] = {0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0},
-        ["k"] = {1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1},
-        ["l"] = {1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1},
-        ["m"] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1},
-        ["n"] = {0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1},
-        ["o"] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0},
-        ["p"] = {0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 0},
-        ["q"] = {0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 0, 1},
-        ["r"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0},
-        ["s"] = {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0},
-        ["t"] = {0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1},
-        ["u"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1},
-        ["v"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0},
-        ["w"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0},
-        ["x"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1},
-        ["y"] = {0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0},
-        ["z"] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1},
-        ["{"] = {0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1},
-        ["|"] = {0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0},
-        ["}"] = {1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 0},
-        ["~"] = {0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0}
-    }
+    -- Draw the text
+    love.graphics.print(text, x * config.scaling, y * config.scaling)
 
-    -- Draw each character in the string
-    for i = 1, #text do
-        local char = text:sub(i, i)
-        local pattern = tinyFont[char] or tinyFont["?"] -- Default to "?" for unknown characters
-
-        -- Draw the character pixel by pixel
-        for row = 0, 4 do
-            for col = 0, 2 do
-                local pixelIndex = row * 3 + col + 1
-                if pattern[pixelIndex] == 1 then
-                    love.graphics.rectangle("fill", 
-					   config.scaling * (x + (i - 1) * charWidth + col * scale),
-                       config.scaling * ((y-1) - (4 * scale) + row * scale),
-                       config.scaling * (scale),
-					   config.scaling * (scale)
-					)
-                end
-            end
-        end
-    end
-
-    love.graphics.pop()
+    -- Restore the previous font
+    love.graphics.setFont(currentFont)
 end
 
 -- Create an environment with drawing functions for script sandboxing
