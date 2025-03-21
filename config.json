@@ -1,0 +1,13 @@
+{
+  "osc": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 8000,
+    "address": "/dnt",
+    "sendInterval": 0.001,
+    "outputFormat": "single"
+  },
+  "script": {
+    "path": "test_script.lua"
+  }
+}
