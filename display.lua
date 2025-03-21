@@ -17,7 +17,7 @@ local config = {
 
 -- Shared color calculation function with non-linear brightness adjustment
 local function calculateColor(colorValue)
-    local shade = math.max(colorValue, 5) / 15 -- Base brightness adjustment
+    local shade = math.max(colorValue, 0) / 15 -- Base brightness adjustment
     shade = math.pow(shade, config.brightnessExp) -- Non-linear brightness curve
     return {
         shade * config.baseColor[1], shade * config.baseColor[2],
@@ -50,11 +50,11 @@ end
 -- Clear the display
 function display.clear() love.graphics.clear(0, 0, 0, 1) end
 
--- Draw a rectangle (outlined)
+-- Draw a rectangle (filled)
 function display.drawRectangle(x1, y1, x2, y2, color)
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
-    love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
+    love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
 end
@@ -163,7 +163,7 @@ function display.getConfig() return config end
 
 -- Draw text with tiny 3x5 pixel font
 function display.drawTinyText(x, y, text, color)
-    local col = calculateColor(color)
+    local col = calculateColor(color or 15)
 
     -- Implementation of tiny 3x5 pixel font
     love.graphics.push()
@@ -283,10 +283,12 @@ function display.drawTinyText(x, y, text, color)
             for col = 0, 2 do
                 local pixelIndex = row * 3 + col + 1
                 if pattern[pixelIndex] == 1 then
-                    love.graphics.rectangle("fill", x + (i - 1) * charWidth +
-                                                col * scale,
-                                            y - (4 * scale) + row * scale,
-                                            scale, scale)
+                    love.graphics.rectangle("fill", 
+					   config.scaling * (x + (i - 1) * charWidth + col * scale),
+                       config.scaling * ((y-1) - (4 * scale) + row * scale),
+                       config.scaling * (scale),
+					   config.scaling * (scale)
+					)
                 end
             end
         end
