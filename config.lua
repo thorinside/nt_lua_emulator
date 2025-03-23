@@ -12,7 +12,8 @@ local defaultConfig = {
         sendInterval = 0.001,
         outputFormat = "single" -- "array" or "single"
     },
-    script = {path = "test_script.lua"}
+    script = {path = "test_script.lua"},
+    minimalMode = false -- Add minimal mode setting
 }
 
 -- Load configuration from file

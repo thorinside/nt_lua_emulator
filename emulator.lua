@@ -1,15 +1,17 @@
 -- emulator.lua
 local M = {} -- We'll return this table.
 
--- Require modules
-require("constants")
-local display = require("display") -- New display module
+-- Required modules
+require("constants") -- These are global variables
+-- Constants are now global: kGate, kTrigger, kCV, kBipolar, kUnipolar
+local display = require("display")
 local io_panel = require("io_panel")
+local controls = require("controls")
 local parameter_knobs = require("parameter_knobs")
 local helpers = require("helpers")
-local config = require("config")
 local osc_client = require("osc_client")
-local controls = require("controls") -- Add controls module
+local config = require("config")
+local MinimalMode = require("minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
 
 --------------------------------------------------------------------------------
@@ -847,6 +849,10 @@ local function checkScriptModified(path)
     end
 end
 
+-- Add a variable to track minimal mode state
+local minimalMode = false
+
+-- At the end of the function M.load(), add:
 function M.load()
     -- Calculate window size to fit the display and UI
     local windowWidth = scaledDisplayWidth -- Make window exactly as wide as the scaled display
@@ -932,8 +938,31 @@ function M.load()
 
     -- Try to load saved state, or create default mappings if no state exists
     if not loadIOState() then createDefaultMappings() end
+
+    -- Initialize minimal mode
+    local cfg = config.load()
+    MinimalMode.init(display, scriptParameters)
+
+    -- Set initial state from config
+    minimalMode = cfg.minimalMode or false
+
+    -- Calculate correct window size based on minimal mode
+    if minimalMode then
+        MinimalMode.activate()
+        -- Set window to display size only
+        local config = display.getConfig()
+        love.window.setMode(config.width * config.scaling,
+                            config.height * config.scaling,
+                            {resizable = false, msaa = 8, vsync = 1})
+    else
+        -- For normal mode, use calculated window height based on active overlay
+        windowHeight = calculateWindowHeight(activeOverlay)
+        love.window.setMode(windowWidth, windowHeight,
+                            {resizable = false, msaa = 8, vsync = 1})
+    end
 end
 
+-- Modify the update function to support minimal mode
 function M.update(dt)
     -- Update fade transition
     if fadeAlpha ~= fadeTarget then
@@ -944,8 +973,15 @@ function M.update(dt)
         end
     end
 
-    -- Update controls active state based on current overlay
-    controls.setActive(activeOverlay == "controls")
+    -- Update controls active state based on current overlay and minimal mode
+    controls.setActive(activeOverlay == "controls" and not minimalMode)
+
+    -- If in minimal mode, update it
+    if minimalMode then
+        -- Update parameter references in minimal mode
+        MinimalMode.setParameters(scriptParameters)
+        MinimalMode.update(dt)
+    end
 
     -- Only proceed with update if we have a valid script
     if not script then return end
@@ -962,6 +998,12 @@ function M.update(dt)
         end
         if string.len(gateLog) > 13 then print(gateLog) end
     end
+
+    -- Script reload checks are the same...
+
+    -- Modify the draw function to support minimal mode
+
+    -- Script reload checks are the same...
 
     -- Check for script file modification
     if checkScriptModified(scriptPath) then
@@ -1153,10 +1195,18 @@ function M.update(dt)
             end
 
             print("Script reloaded successfully!")
+
+            -- Mark the reload blink state
+            reloadBlink = true
+            lastReloadTime = time
         else
             print("Error reloading script, continuing with previous version")
         end
+        return
     end
+
+    -- Update reload blink state
+    if reloadBlink and (time - lastReloadTime) > 1.0 then reloadBlink = false end
 
     time = time + dt
 
@@ -1424,6 +1474,7 @@ function M.update(dt)
     end
 end
 
+-- Modify the draw function to support minimal mode
 function M.draw()
     -- Reset line width for consistent drawing
     love.graphics.setLineWidth(1.0)
@@ -1436,228 +1487,305 @@ function M.draw()
     -- Clear the canvas explicitly to prevent pixels from staying lit
     love.graphics.clear(0, 0, 0, 1)
 
-    -- Draw script content to display canvas
-    if script and script.draw then safeScriptCall(script.draw, script) end
+    -- Draw script content to display canvas with error handling
+    if script and script.draw then
+        local success, err = pcall(function() script.draw(script) end)
+
+        if not success then
+            print("ERROR in script draw: " .. tostring(err))
+            MinimalMode.setError(err)
+        end
+    end
 
     -- Reset canvas
     love.graphics.setCanvas()
 
-    -- Render the display at the top of the window
-    love.graphics.setColor(1, 1, 1)
-    display.render()
+    -- If in minimal mode, use minimal mode drawing
+    if minimalMode then
+        -- Use minimal mode display
+        love.graphics.clear(0, 0, 0)
+        love.graphics.setColor(1, 1, 1)
+        display.render()
 
-    -- Draw a border around the display area for better visualization
-    love.graphics.setColor(0.5, 0.5, 0.5, 0.8) -- Light gray, semi-transparent
-    love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", 0, 0, scaledDisplayWidth,
-                            scaledDisplayHeight)
-
-    -- Draw the active overlay
-    if activeOverlay == "controls" then
-        -- Draw the controls section below the display
-        controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
-        controls.draw()
+        -- Call minimal mode's draw function
+        MinimalMode.draw()
     else
-        -- Draw Script I/O panel (inputs & outputs)
-        local scriptIOPanelY = (scaledDisplayHeight / uiScaleFactor) + 20
-        local physicalIOStartY = scriptIOPanelY
-        io_panel.drawScriptIO({
-            script = script,
-            font = fontSmall,
-            inputCount = scriptInputCount,
-            outputCount = scriptOutputCount,
-            inputAssignments = scriptInputAssignments,
-            outputAssignments = scriptOutputAssignments,
-            ioY = scriptIOPanelY,
-            cellH = 40
-        })
+        -- Normal rendering with all UI elements
 
-        -- Draw Physical I/O grids
-        local physicalIOBottomY = io_panel.drawPhysicalIO({
-            currentInputs = currentInputs,
-            currentOutputs = currentOutputs,
-            inputClock = inputClock,
-            inputPolarity = inputPolarity,
-            inputScaling = inputScaling,
-            clockBPM = clockBPM,
-            font = fontDefault,
-            physInputX = 40,
-            physInputY = physicalIOStartY,
-            cellW = 40,
-            cellH = 40
-        })
+        -- Render the display at the top of the window
+        love.graphics.setColor(1, 1, 1)
+        display.render()
 
-        -- Store the bottom Y position for use in other functions
-        lastPhysicalIOBottomY = physicalIOBottomY
+        -- Draw a border around the display area for better visualization
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.8) -- Light gray, semi-transparent
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", 0, 0, scaledDisplayWidth,
+                                scaledDisplayHeight)
 
-        -- Display BPM if there's at least one clock input
-        local hasClockInput = false
-        for i = 1, 12 do
-            if inputClock[i] then
-                hasClockInput = true
-                break
-            end
-        end
-
-        if hasClockInput then
-            -- Center BPM text specifically under the bottom row of inputs (9-12)
-            love.graphics.setColor(1, 1, 1, 0.5) -- 50% opacity
-            local bpmText = string.format("BPM %.0f", clockBPM)
-            local smallFont = love.graphics.newFont(10) -- Smaller font
-            local prevFont = love.graphics.getFont()
-            love.graphics.setFont(smallFont)
-            local textWidth = smallFont:getWidth(bpmText)
-
-            -- Get positions of inputs 9-12 (bottom row)
-            local inputPos = io_panel.getPhysicalInputPositions()
-            if inputPos and #inputPos >= 12 then
-                -- Calculate center between input 9 and input 12
-                local leftX = inputPos[9][1]
-                local rightX = inputPos[12][1]
-                local centerX = (leftX + rightX) / 2 - textWidth / 2
-
-                -- Calculate Y position with 16px gap under bottom row
-                local bottomY = inputPos[9][2] + 15 -- Radius of input circle
-                local textY = bottomY + 16 -- 16px gap below the bottom of the circles
-
-                love.graphics.print(bpmText, centerX, textY)
-            else
-                -- Fallback if positions not available
-                local cellWidth = 40 -- Width of each input cell
-                local inputSectionWidth = 4 * cellWidth
-                local inputCenterX = 40 + (inputSectionWidth / 2) -- 40 is physInputX
-                local centerX = inputCenterX - textWidth / 2
-                love.graphics.print(bpmText, centerX, physicalIOBottomY + 16)
-            end
-
-            love.graphics.setFont(prevFont) -- Restore previous font
-        end
-
-        -- Draw Parameter Knobs using the new layout (9 per row)
-        parameter_knobs.draw({
-            scriptParameters = scriptParameters,
-            displayWidth = displayWidth,
-            panelY = physicalIOBottomY + 24, -- Position 24px below physical I/O section
-            knobRadius = paramKnobRadius,
-            knobSpacing = paramKnobSpacing,
-            parameterAutomation = parameterAutomation
-        })
-    end
-
-    -- Draw dragging line if needed (using positions from io_panel)
-    if dragging then
-        love.graphics.setColor(1, 1, 0)
-        local srcX, srcY = 0, 0
-        if dragType == "input" then
-            local pos = io_panel.getInputPosition(dragIndex)
-            if pos then srcX, srcY = pos[1], pos[2] end
-        elseif dragType == "output" then
-            local pos = io_panel.getOutputPosition(dragIndex)
-            if pos then srcX, srcY = pos[1], pos[2] end
-        end
-        love.graphics.line(srcX, srcY, dragX, dragY)
-    end
-
-    -- Draw hot reload indicator LED directly on screen
-    if enableAutoReload then
-        if reloadBlink and math.floor(time * 4) % 2 == 0 then
-            -- Blink yellow fast when recently reloaded
-            love.graphics.setColor(1, 1, 0, 0.8)
+        -- Draw the active overlay
+        if activeOverlay == "controls" then
+            -- Draw the controls section below the display
+            controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
+            controls.draw()
         else
-            -- Steady green when enabled
-            love.graphics.setColor(0, 1, 0, 0.8)
+            -- Draw Script I/O panel (inputs & outputs)
+            local scriptIOPanelY = (scaledDisplayHeight / uiScaleFactor) + 20
+            local physicalIOStartY = scriptIOPanelY
+            io_panel.drawScriptIO({
+                script = script,
+                font = fontSmall,
+                inputCount = scriptInputCount,
+                outputCount = scriptOutputCount,
+                inputAssignments = scriptInputAssignments,
+                outputAssignments = scriptOutputAssignments,
+                ioY = scriptIOPanelY,
+                cellH = 40
+            })
+
+            -- Draw Physical I/O grids
+            local physicalIOBottomY = io_panel.drawPhysicalIO({
+                currentInputs = currentInputs,
+                currentOutputs = currentOutputs,
+                inputClock = inputClock,
+                inputPolarity = inputPolarity,
+                inputScaling = inputScaling,
+                clockBPM = clockBPM,
+                font = fontDefault,
+                physInputX = 40,
+                physInputY = physicalIOStartY,
+                cellW = 40,
+                cellH = 40
+            })
+
+            -- Store the bottom Y position for use in other functions
+            lastPhysicalIOBottomY = physicalIOBottomY
+
+            -- Display BPM if there's at least one clock input
+            local hasClockInput = false
+            for i = 1, 12 do
+                if inputClock[i] then
+                    hasClockInput = true
+                    break
+                end
+            end
+
+            if hasClockInput then
+                -- Center BPM text specifically under the bottom row of inputs (9-12)
+                love.graphics.setColor(1, 1, 1, 0.5) -- 50% opacity
+                local bpmText = string.format("BPM %.0f", clockBPM)
+                local smallFont = love.graphics.newFont(10) -- Smaller font
+                local prevFont = love.graphics.getFont()
+                love.graphics.setFont(smallFont)
+                local textWidth = smallFont:getWidth(bpmText)
+
+                -- Get positions of inputs 9-12 (bottom row)
+                local inputPos = io_panel.getPhysicalInputPositions()
+                if inputPos and #inputPos >= 12 then
+                    -- Calculate center between input 9 and input 12
+                    local leftX = inputPos[9][1]
+                    local rightX = inputPos[12][1]
+                    local centerX = (leftX + rightX) / 2 - textWidth / 2
+
+                    -- Calculate Y position with 16px gap under bottom row
+                    local bottomY = inputPos[9][2] + 15 -- Radius of input circle
+                    local textY = bottomY + 16 -- 16px gap below the bottom of the circles
+
+                    love.graphics.print(bpmText, centerX, textY)
+                else
+                    -- Fallback if positions not available
+                    local cellWidth = 40 -- Width of each input cell
+                    local inputSectionWidth = 4 * cellWidth
+                    local inputCenterX = 40 + (inputSectionWidth / 2) -- 40 is physInputX
+                    local centerX = inputCenterX - textWidth / 2
+                    love.graphics
+                        .print(bpmText, centerX, physicalIOBottomY + 16)
+                end
+
+                love.graphics.setFont(prevFont) -- Restore previous font
+            end
+
+            -- Draw Parameter Knobs using the new layout (9 per row)
+            parameter_knobs.draw({
+                scriptParameters = scriptParameters,
+                displayWidth = displayWidth,
+                panelY = physicalIOBottomY + 24, -- Position 24px below physical I/O section
+                knobRadius = paramKnobRadius,
+                knobSpacing = paramKnobSpacing,
+                parameterAutomation = parameterAutomation
+            })
         end
-    else
-        -- Gray when disabled
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
-    end
 
-    -- Draw hot reload LED at bottom right of screen
-    love.graphics.circle("fill", love.graphics.getWidth() - 16,
-                         love.graphics.getHeight() - 6, 3)
-    love.graphics.setColor(1, 1, 1, 0.7)
-    love.graphics.circle("line", love.graphics.getWidth() - 16,
-                         love.graphics.getHeight() - 6, 3)
+        -- Draw dragging line if needed (using positions from io_panel)
+        if dragging then
+            love.graphics.setColor(1, 1, 0)
+            local srcX, srcY = 0, 0
+            if dragType == "input" then
+                local pos = io_panel.getInputPosition(dragIndex)
+                if pos then srcX, srcY = pos[1], pos[2] end
+            elseif dragType == "output" then
+                local pos = io_panel.getOutputPosition(dragIndex)
+                if pos then srcX, srcY = pos[1], pos[2] end
+            end
+            love.graphics.line(srcX, srcY, dragX, dragY)
+        end
 
-    -- Draw OSC indicator LED
-    if osc_client.isEnabled() then
-        -- Green when enabled
-        love.graphics.setColor(0, 1, 0, 0.8)
-    else
-        -- Gray when disabled
-        love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
-    end
+        -- Draw hot reload indicator LED directly on screen
+        if enableAutoReload then
+            if reloadBlink and math.floor(time * 4) % 2 == 0 then
+                -- Blink yellow fast when recently reloaded
+                love.graphics.setColor(1, 1, 0, 0.8)
+            else
+                -- Steady green when enabled
+                love.graphics.setColor(0, 1, 0, 0.8)
+            end
+        else
+            -- Gray when disabled
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+        end
 
-    -- Draw OSC LED at bottom right of screen (to the right of hot reload LED)
-    love.graphics.circle("fill", love.graphics.getWidth() - 6,
-                         love.graphics.getHeight() - 6, 3)
-    love.graphics.setColor(1, 1, 1, 0.7)
-    love.graphics.circle("line", love.graphics.getWidth() - 6,
-                         love.graphics.getHeight() - 6, 3)
+        -- Draw hot reload LED at bottom right of screen
+        love.graphics.circle("fill", love.graphics.getWidth() - 16,
+                             love.graphics.getHeight() - 6, 3)
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.circle("line", love.graphics.getWidth() - 16,
+                             love.graphics.getHeight() - 6, 3)
 
-    -- Draw error notification if active
-    if errorNotification.active then
-        -- Update notification alpha for fade in/out
-        errorNotification.alpha = errorNotification.alpha +
-                                      (errorNotification.targetAlpha -
-                                          errorNotification.alpha) * 0.01 * 5
+        -- Draw OSC indicator LED
+        if osc_client.isEnabled() then
+            -- Green when enabled
+            love.graphics.setColor(0, 1, 0, 0.8)
+        else
+            -- Gray when disabled
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+        end
 
-        -- Background rectangle
-        love.graphics.setColor(0.1, 0.1, 0.1, errorNotification.alpha * 0.9)
-        local notifWidth = 400
-        local notifHeight = 80
-        local notifX = (love.graphics.getWidth() - notifWidth) / 2
-        local notifY = 100
-        love.graphics.rectangle("fill", notifX, notifY, notifWidth, notifHeight,
-                                8, 8)
+        -- Draw OSC LED at bottom right of screen (to the right of hot reload LED)
+        love.graphics.circle("fill", love.graphics.getWidth() - 6,
+                             love.graphics.getHeight() - 6, 3)
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.circle("line", love.graphics.getWidth() - 6,
+                             love.graphics.getHeight() - 6, 3)
 
-        -- Border
-        love.graphics.setColor(0.9, 0.2, 0.2, errorNotification.alpha * 0.9)
-        love.graphics.rectangle("line", notifX, notifY, notifWidth, notifHeight,
-                                8, 8)
+        -- Draw error notification if active
+        if errorNotification.active then
+            -- Update notification alpha for fade in/out
+            errorNotification.alpha = errorNotification.alpha +
+                                          (errorNotification.targetAlpha -
+                                              errorNotification.alpha) * 0.01 *
+                                          5
 
-        -- Text
-        love.graphics.setColor(1, 1, 1, errorNotification.alpha)
-        love.graphics.setFont(fontDefault)
-        love.graphics.printf("Error", notifX + 10, notifY + 10, notifWidth - 20,
-                             "center")
-        love.graphics.setFont(fontSmall)
-        love.graphics.printf(errorNotification.message, notifX + 10,
-                             notifY + 35, notifWidth - 20, "center")
+            -- Background rectangle
+            love.graphics.setColor(0.1, 0.1, 0.1, errorNotification.alpha * 0.9)
+            local notifWidth = 400
+            local notifHeight = 80
+            local notifX = (love.graphics.getWidth() - notifWidth) / 2
+            local notifY = 100
+            love.graphics.rectangle("fill", notifX, notifY, notifWidth,
+                                    notifHeight, 8, 8)
 
-        -- Update notification time
-        errorNotification.time = errorNotification.time + 0.01
-        if errorNotification.time > errorNotification.duration then
-            errorNotification.targetAlpha = 0
-            if errorNotification.alpha < 0.01 then
-                errorNotification.active = false
+            -- Border
+            love.graphics.setColor(0.9, 0.2, 0.2, errorNotification.alpha * 0.9)
+            love.graphics.rectangle("line", notifX, notifY, notifWidth,
+                                    notifHeight, 8, 8)
+
+            -- Text
+            love.graphics.setColor(1, 1, 1, errorNotification.alpha)
+            love.graphics.setFont(fontDefault)
+            love.graphics.printf("Error", notifX + 10, notifY + 10,
+                                 notifWidth - 20, "center")
+            love.graphics.setFont(fontSmall)
+            love.graphics.printf(errorNotification.message, notifX + 10,
+                                 notifY + 35, notifWidth - 20, "center")
+
+            -- Update notification time
+            errorNotification.time = errorNotification.time + 0.01
+            if errorNotification.time > errorNotification.duration then
+                errorNotification.targetAlpha = 0
+                if errorNotification.alpha < 0.01 then
+                    errorNotification.active = false
+                end
             end
         end
     end
 end
 
--- Keyboard shortcut handler
+-- Modify the keypressed function to add F1 toggle
 function M.keypressed(key)
-    if key == "space" then
-        -- Simple toggle between controls and I/O overlays
-        activeOverlay = (activeOverlay == "controls") and "io" or "controls"
+    -- F1 toggles minimal mode
+    if key == "f1" then
+        minimalMode = not minimalMode
 
-        -- Store current window position
-        local x, y = love.window.getPosition()
+        if minimalMode then
+            MinimalMode.activate()
+            -- Save window position
+            local x, y = love.window.getPosition()
 
-        -- Fixed window width that doesn't change
-        local windowWidth = scaledDisplayWidth
+            -- Set window to display size only
+            local config = display.getConfig()
+            love.window.setMode(config.width * config.scaling,
+                                config.height * config.scaling,
+                                {resizable = false, msaa = 8, vsync = 1})
 
-        -- Get window height from the function using the new overlay type
-        local windowHeight = calculateWindowHeight(activeOverlay)
+            -- Restore position
+            love.window.setPosition(x, y)
+        else
+            MinimalMode.deactivate()
 
-        -- Set new window size and restore position
-        love.window.setMode(windowWidth, windowHeight,
-                            {resizable = false, msaa = 8, vsync = 1})
-        love.window.setPosition(x, y)
+            -- Save window position
+            local x, y = love.window.getPosition()
+
+            -- Restore normal window size
+            local windowWidth = scaledDisplayWidth
+            local windowHeight = calculateWindowHeight(activeOverlay)
+            love.window.setMode(windowWidth, windowHeight,
+                                {resizable = false, msaa = 8, vsync = 1})
+
+            -- Restore position
+            love.window.setPosition(x, y)
+        end
+
+        -- Save minimalMode to config
+        local cfg = config.load()
+        cfg.minimalMode = minimalMode
+        config.save(cfg)
 
         return
-    elseif key == "r" and love.keyboard.isDown("lctrl") then
+    end
+
+    -- Handle key in minimal mode if active
+    if minimalMode then
+        if MinimalMode.keypressed(key) then
+            return -- Key was handled by minimal mode
+        end
+    end
+
+    -- Continue with normal key handling
+    if key == "space" then
+        -- Only toggle overlays when not in minimal mode
+        if not minimalMode then
+            -- Simple toggle between controls and I/O overlays
+            activeOverlay = (activeOverlay == "controls") and "io" or "controls"
+
+            -- Store current window position
+            local x, y = love.window.getPosition()
+
+            -- Fixed window width that doesn't change
+            local windowWidth = scaledDisplayWidth
+
+            -- Get window height from the function using the new overlay type
+            local windowHeight = calculateWindowHeight(activeOverlay)
+
+            -- Set new window size and restore position
+            love.window.setMode(windowWidth, windowHeight,
+                                {resizable = false, msaa = 8, vsync = 1})
+            love.window.setPosition(x, y)
+        end
+        return
+    end
+
+    -- Continue with normal keypressed handling...
+
+    if key == "r" and love.keyboard.isDown("lctrl") then
         -- Ctrl+R: Force script reload
         print("Manual reload triggered...")
         local newScript, newScriptParameters = loadScript(scriptPath)
@@ -1841,6 +1969,10 @@ function M.keypressed(key)
             end
 
             print("Script reloaded successfully!")
+
+            -- Mark the reload blink state
+            reloadBlink = true
+            lastReloadTime = time
         else
             print("Error reloading script, continuing with previous version")
         end
@@ -1866,6 +1998,14 @@ function M.keypressed(key)
         print("I/O mappings manually saved to " .. stateFile)
         return
     end
+end
+
+-- Modify keyreleased to support minimal mode
+function M.keyreleased(key)
+    -- Let minimal mode handle if active
+    if minimalMode then MinimalMode.keyreleased(key) end
+
+    -- Continue with normal key release handling...
 end
 
 function M.mousepressed(x, y, button)

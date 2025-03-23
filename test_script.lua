@@ -239,7 +239,6 @@ return {
         local gateIdx = self.parameters[2]
         -- Leave top 20px unused (for header)
 
-        drawTinyText(120, 15, "Hi Anders...")
         -- Draw gate sequence blocks starting at y = 25.
         local gateSeq = gateSequences[gateIdx]
         local numGate = self.parameters[8]
