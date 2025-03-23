@@ -1,84 +1,82 @@
 {
-  "scriptPath":"test_script.lua",
-  "inputs":{
-    "1":1,
-    "2":2,
-    "3":3,
-    "4":4
+  "clockBPM":134,
+  "window":{
+    "width":768,
+    "height":600,
+    "x":372,
+    "y":191
   },
   "outputs":{
-    "1":1,
     "2":2,
-    "3":3
+    "1":1
   },
+  "inputs":{
+    "2":2,
+    "3":3,
+    "1":1
+  },
+  "scriptPath":"test_script.lua",
   "inputModes":{
-    "1":{
-      "clock":true,
-      "polarity":0,
-      "scaling":1
-    },
-    "2":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "3":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "4":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "5":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "6":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "7":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
     "8":{
-      "clock":false,
       "polarity":0,
-      "scaling":1
-    },
-    "9":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
-    },
-    "11":{
-      "clock":false,
-      "polarity":0,
-      "scaling":1
+      "scaling":1,
+      "clock":false
     },
     "12":{
-      "clock":false,
       "polarity":0,
-      "scaling":1
+      "scaling":1,
+      "clock":false
+    },
+    "11":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "5":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "2":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "3":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "4":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
     },
     "10":{
-      "clock":false,
       "polarity":0,
-      "scaling":1
+      "scaling":1,
+      "clock":false
+    },
+    "1":{
+      "polarity":0,
+      "scaling":1,
+      "clock":true
+    },
+    "7":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "6":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "9":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
     }
   },
-  "oscEnabled":true,
-  "clockBPM":80,
-  "window":{
-    "x":743,
-    "y":66,
-    "width":768,
-    "height":600
-  }
+  "oscEnabled":true
 }

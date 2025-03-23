@@ -12,7 +12,7 @@ local config = {
     scaling = 4,
     baseColor = {0, 1, 1}, -- Electric blue tint (R, G, B)
     canvas = nil,
-    brightnessExp = 0.85, -- Exponent for brightness curve (< 1 makes dim colors brighter)
+    brightnessExp = 0.95, -- Exponent for brightness curve (< 1 makes dim colors brighter)
     pixelFont = nil, -- Will hold the PixelmixRegular font
     tinyFont = nil -- Will hold the tom-thumb font
 }

@@ -1,18 +1,6 @@
--- Markov Chain Sequencer
+-- AE Sequencer
+-- A simple generative sequencer with independent voltage and gate sequences.
 --[[
-A probabilistic sequencer that generates musical patterns using Markov chains.
-• Input 1: Clock gate - advances sequence
-• Input 2: Reset trigger - returns to step 1
-• Input 3: Mutation trigger - changes notes, keeps rhythm
-• Input 4: Regenerate trigger - completely new sequence
-
-Outputs: 1=Pitch CV, 2=Gate, 3=Velocity CV
-
-"Emotion" parameter influences the musical character:
-- Low values: Melancholic/pensive (minor keys, descending patterns)
-- Mid values: Neutral/balanced (mixed directions, moderate intervals)
-- High values: Uplifting/energetic (major keys, rising patterns)
-]] --[[
 This is free and unencumbered software released into the public domain.
 
 Anyone is free to copy, modify, publish, use, compile, sell, or
@@ -36,378 +24,280 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-For more information, please refer to <https://unlicense.org>]] --
-local NUM_STEPS = 16
-local ROOT_NAMES = {
-    "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"
-}
-local SCALES = {
-    {0, 2, 4, 5, 7, 9, 11}, {0, 2, 3, 5, 7, 8, 10}, {0, 2, 3, 5, 7, 8, 11},
-    {0, 2, 4, 7, 9}, {0, 3, 5, 7, 10}, {0, 1, 5, 7, 8}, {0, 2, 4, 6, 11},
-    {0, 1, 4, 5, 7, 8, 11}, {0, 2, 3, 6, 7, 8, 11}, {0, 2, 4, 6, 8, 10}
-}
-local SCALE_NAMES = {
-    "Major", "Natural Minor", "Harmonic Minor", "Major Pentatonic",
-    "Minor Pentatonic", "Miyako Bushi", "Prometheus", "Hungarian Minor",
-    "Double Harmonic", "Whole Tone"
-}
+For more information, please refer to <https://unlicense.org>
+]] --
+local NUM_SEQUENCES = 20
+local MAX_STEPS = 32
 
-local function get_transition_matrix(scaleIndex, emotion)
-    local scaleLength = #SCALES[scaleIndex]
-    local matrix
-    local emotionFactor = emotion / 100
-    if scaleIndex == 6 then
-        matrix = {
-            [1] = {0.1, 0.4, 0.1, 0.3, 0.1},
-            [2] = {0.3, 0.1, 0.3, 0.1, 0.2},
-            [3] = {0.1, 0.4, 0.1, 0.3, 0.1},
-            [4] = {0.3, 0.1, 0.4, 0.1, 0.1},
-            [5] = {0.5, 0.2, 0.1, 0.1, 0.1}
-        }
-    elseif scaleIndex == 7 then
-        matrix = {
-            [1] = {0.1, 0.3, 0.2, 0.3, 0.1},
-            [2] = {0.2, 0.1, 0.3, 0.1, 0.3},
-            [3] = {0.1, 0.2, 0.1, 0.4, 0.2},
-            [4] = {0.2, 0.2, 0.2, 0.1, 0.3},
-            [5] = {0.4, 0.1, 0.2, 0.2, 0.1}
-        }
-    elseif scaleLength == 5 then
-        matrix = {
-            [1] = {0.2, 0.3, 0.2, 0.2, 0.1},
-            [2] = {0.2, 0.1, 0.3, 0.2, 0.2},
-            [3] = {0.1, 0.2, 0.1, 0.4, 0.2},
-            [4] = {0.3, 0.1, 0.2, 0.1, 0.3},
-            [5] = {0.4, 0.2, 0.1, 0.2, 0.1}
-        }
-    elseif scaleLength == 6 then
-        matrix = {
-            [1] = {0.1, 0.2, 0.3, 0.2, 0.1, 0.1},
-            [2] = {0.2, 0.1, 0.2, 0.2, 0.2, 0.1},
-            [3] = {0.1, 0.2, 0.1, 0.3, 0.2, 0.1},
-            [4] = {0.1, 0.1, 0.2, 0.1, 0.3, 0.2},
-            [5] = {0.2, 0.1, 0.1, 0.2, 0.1, 0.3},
-            [6] = {0.3, 0.1, 0.2, 0.1, 0.2, 0.1}
-        }
+local OUTPUT_BUFFER = {0, 0} -- Preallocated output buffer for step()
+local lastActiveVoltIndex = 1 -- Tracks last active voltage sequence index
+
+-- Tables to hold 20 voltage sequences and 20 gate sequences.
+local voltageSequences = {}
+local gateSequences = {}
+
+-- Generate a random 16-bit raw value in the range [-32768, 32767]
+local function generateRandomRawValue() return math.random(-32768, 32767) end
+
+-- Randomize a voltage sequence by filling its steps with raw values.
+local function randomizeVoltageSequence(seq)
+    for i = 1, seq.stepCount do seq.steps[i] = generateRandomRawValue() end
+end
+
+-- Randomize a gate sequence.
+local function randomizeGateSequence(seq)
+    for i = 1, MAX_STEPS do seq.steps[i] = math.random(100) end
+end
+
+-- Compute the effective voltage range based on polarity.
+-- Polarity: 1 = Positive, 2 = Bipolar, 3 = Negative.
+local function getEffectiveRange(minV, maxV, polarity)
+    if polarity == 1 then
+        return 0, maxV
+    elseif polarity == 3 then
+        return minV, 0
     else
-        matrix = {
-            [1] = {0.1, 0.3, 0.2, 0.2, 0.1, 0.05, 0.05},
-            [2] = {0.2, 0.1, 0.3, 0.1, 0.2, 0.05, 0.05},
-            [3] = {0.1, 0.2, 0.1, 0.3, 0.1, 0.15, 0.05},
-            [4] = {0.3, 0.1, 0.2, 0.1, 0.2, 0.05, 0.05},
-            [5] = {0.3, 0.1, 0.05, 0.2, 0.1, 0.2, 0.05},
-            [6] = {0.05, 0.2, 0.2, 0.05, 0.2, 0.1, 0.2},
-            [7] = {0.4, 0.05, 0.05, 0.1, 0.2, 0.1, 0.1}
-        }
+        return minV, maxV
     end
-    local modifiedMatrix = {}
-    for i = 1, #matrix do
-        modifiedMatrix[i] = {}
-        local totalProb = 0
-        for j = 1, #matrix[i] do totalProb = totalProb + matrix[i][j] end
-        for j = 1, #matrix[i] do
-            local emotionInfluence
-            if emotionFactor < 0.5 then
-                if j < i then
-                    emotionInfluence = 1 + (0.5 - emotionFactor) * 1.5
-                elseif j > i then
-                    emotionInfluence = 1 - (0.5 - emotionFactor) * 1.5
-                else
-                    emotionInfluence = 1
-                end
-            else
-                if j > i then
-                    emotionInfluence = 1 + (emotionFactor - 0.5) * 1.5
-                elseif j < i then
-                    emotionInfluence = 1 - (emotionFactor - 0.5) * 1.5
-                else
-                    emotionInfluence = 1
-                end
+end
+
+-- Quantize a voltage value to the specified resolution.
+local function quantizeVoltage(value, resolutionBits, effectiveMin, effectiveMax)
+    local levels = (2 ^ resolutionBits) - 1
+    local rangeEffective = effectiveMax - effectiveMin
+    local stepSize = rangeEffective / levels
+    local index = math.floor((value - effectiveMin) / stepSize + 0.5)
+    local quantizedValue = index * stepSize + effectiveMin
+    if quantizedValue < effectiveMin then quantizedValue = effectiveMin end
+    if quantizedValue > effectiveMax then quantizedValue = effectiveMax end
+    return quantizedValue
+end
+
+-- Update the cached voltage for the current step by mapping the raw value.
+local function updateVoltageCached(seq, resolution, minV, maxV, polarity)
+    local raw = seq.steps[seq.currentStep]
+    local effectiveMin, effectiveMax = getEffectiveRange(minV, maxV, polarity)
+    local fraction
+    if polarity == 2 then
+        fraction = (raw + 32768) / 65535
+    elseif polarity == 1 then
+        local clamped = raw < 0 and 0 or raw
+        fraction = clamped / 32767
+    elseif polarity == 3 then
+        local clamped = raw > 0 and 0 or raw
+        fraction = (clamped + 32768) / 32768
+    end
+    local value = fraction * (effectiveMax - effectiveMin) + effectiveMin
+    seq.cachedVoltage = quantizeVoltage(value, resolution, effectiveMin,
+                                        effectiveMax)
+end
+
+-- Initialize the 20 sequences if not already done.
+local function initSequences()
+    if #voltageSequences < NUM_SEQUENCES then
+        for i = 1, NUM_SEQUENCES do
+            voltageSequences[i] = {
+                currentStep = 1,
+                stepCount = 8,
+                cachedVoltage = 0,
+                steps = {}
+            }
+            for j = 1, MAX_STEPS do
+                voltageSequences[i].steps[j] = generateRandomRawValue()
             end
-            modifiedMatrix[i][j] = matrix[i][j] * emotionInfluence
-        end
-        local newTotal = 0
-        for j = 1, #modifiedMatrix[i] do
-            newTotal = newTotal + modifiedMatrix[i][j]
-        end
-        for j = 1, #modifiedMatrix[i] do
-            modifiedMatrix[i][j] = modifiedMatrix[i][j] * (totalProb / newTotal)
-        end
-    end
-    return modifiedMatrix
-end
+            updateVoltageCached(voltageSequences[i], 16, -1, 1, 2)
 
-local RHYTHM_PATTERNS = {
-    {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0},
-    {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
-    {1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1},
-    {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0},
-    {1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0},
-    {1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0},
-    {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1},
-    {1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1}
-}
-
-local sequence = {}
-local lastNoteIndex = 1
-local currentStep = 1
-local mutationPending = false
-local regeneratePending = false
-local randomizePending = false
-local currentRhythm = {}
-local outputTable = {0.0, 0.0, 0.0}
-
-local function init_sequence(self)
-    for i = 1, NUM_STEPS do
-        sequence[i] = {pitch = 0, active = 1, velocity = 100, octave = 0}
-    end
-    local emotion = (self and self.parameters and self.parameters[3]) or 50
-    local patternIndex
-    if emotion > 70 then
-        patternIndex = math.random(5, 8)
-    elseif emotion < 30 then
-        patternIndex = math.random(1, 4)
-    else
-        patternIndex = math.random(1, #RHYTHM_PATTERNS)
-    end
-    currentRhythm = {}
-    for i = 1, NUM_STEPS do
-        currentRhythm[i] = RHYTHM_PATTERNS[patternIndex][i]
-    end
-    for i = 1, NUM_STEPS do sequence[i].active = currentRhythm[i] end
-    lastNoteIndex = 1
-end
-
-local function full_generate_sequence(self)
-    local new_seq = {}
-    local root = self.parameters[1]
-    local scaleIndex = self.parameters[2]
-    local scale = SCALES[scaleIndex]
-    local emotion = self.parameters[3]
-    local range = self.parameters[4]
-    local jumpiness = self.parameters[5]
-    local baseOctave = self.parameters[7]
-    local tm = get_transition_matrix(scaleIndex, emotion)
-    local local_last = lastNoteIndex
-    for i = 1, NUM_STEPS do
-        local probs = tm[local_last]
-        local r = math.random()
-        local cum = 0
-        local nextIndex = local_last
-        for j = 1, #scale do
-            cum = cum + probs[j]
-            if r <= cum then
-                nextIndex = j
-                break
+            gateSequences[i] = {
+                stepIndex = 1,
+                numSteps = 16,
+                gateRemainingSteps = 0,
+                steps = {}
+            }
+            for j = 1, MAX_STEPS do
+                gateSequences[i].steps[j] = math.random(100)
             end
         end
-        local octaveShift = 0
-        if range > 1 then
-            local jumpUp = (jumpiness / 100) * (emotion / 100)
-            local jumpDown = (jumpiness / 100) * (1 - (emotion / 100))
-            if math.random() < jumpUp then
-                octaveShift = 1
-            elseif math.random() < jumpDown then
-                octaveShift = -1
-            end
-        end
-        local midiNote = root + scale[nextIndex] +
-                             ((baseOctave + octaveShift) * 12)
-        local vMin = 80 + math.abs(emotion - 50)
-        local vMax = 127
-        if vMin > vMax then vMin = vMax - 10 end
-        new_seq[i] = {
-            pitch = midiNote,
-            active = sequence[i].active,
-            velocity = math.random(vMin, vMax),
-            octave = octaveShift
-        }
-        local_last = nextIndex
     end
-    return new_seq, local_last
 end
 
-local function generate_sequence(self)
-    local new_seq, new_last = full_generate_sequence(self)
-    for i = 1, NUM_STEPS do sequence[i] = new_seq[i] end
-    lastNoteIndex = new_last
-end
-
-local function mutate_sequence(self)
-    local new_seq, new_last = full_generate_sequence(self)
-    for i = 1, NUM_STEPS do
-        if math.random() < ((self.parameters[6] / 100)) then
-            sequence[i] = new_seq[i]
-        end
-    end
-    lastNoteIndex = new_last
-end
-
-local function draw_seq(self)
-    local text = ROOT_NAMES[(self.parameters[1] % 12) + 1] .. " " ..
-                     SCALE_NAMES[self.parameters[2]]
-    local gridX = 8;
-    local gridY = 27;
-    local cw = 11;
-    local ch = 11;
-
-    drawText(gridX, 7, "Markov Chain Sequencer", 12)
-
-    drawText(gridX, gridY - 10, text)
-
-    for i = 1, NUM_STEPS do
-        local x = gridX + ((i - 1) % 8) * cw
-        local y = gridY + math.floor((i - 1) / 8) * ch
-        local bright = sequence[i].active == 1 and 8 or 3
-
-        if i == currentStep then bright = 15 end
-
-        drawRectangle(x, y, x + cw - 2, y + ch - 2, bright)
-
-        if sequence[i].active == 1 then
-            local ph = math.floor((127 - (sequence[i].pitch % 12) * 5) / 15)
-            drawLine(x + 2, y + ph, x + cw - 4, y + ph, 0)
-        end
-    end
-    drawText(gridX, gridY + 25, "Step: " .. currentStep .. "/" .. NUM_STEPS, 12)
-
-    drawText(110, gridY - 5, "Mutation Rate: " .. self.parameters[6] .. "%", 12)
-    drawText(145, gridY + 5, "Emotion: " .. self.parameters[3] .. "%", 12)
-    drawText(133, gridY + 15, "Jumpiness: " .. self.parameters[5] .. "%", 12)
-
-    -- Indicate that we want to draw the whole screen
-    return true
-end
-
-local function init_params(self)
-    local params = {
-        inputs = {kGate, kTrigger, kTrigger, kTrigger, kCV},
-        outputs = 3,
-        inputNames = {"Clock", "Reset", "Randomize", "Regenerate", "CV"},
-        outputNames = {"V/Oct", "Gate", "Velocity"},
-        parameters = {
-            {"Root Note", 0, 127, 60, kMIDINote}, {"Scale", SCALE_NAMES, 1},
-            {"Emotion", 0, 100, 50, kPercent}, {"Range", 1, 3, 2},
-            {"Jumpiness", 0, 100, 30, kPercent},
-            {"Mutation Rate", 0, 100, 20, kPercent}, {"Octave", -2, 2, 0},
-            {"Randomize", 0, 1, 0}, {"Regenerate", 0, 1, 0}
-        }
-    }
-    return params
-end
-
-local function ensure_initialized(self)
-    if #sequence == 0 then
-        init_sequence(self)
-        lastNoteIndex = 1
-        generate_sequence(self)
+-- Global randomize function to randomize all sequences.
+local function globalRandomize(self)
+    for i = 1, NUM_SEQUENCES do
+        randomizeVoltageSequence(voltageSequences[i])
+        updateVoltageCached(voltageSequences[i], self.parameters[7],
+                            self.parameters[4], self.parameters[5],
+                            self.parameters[6])
+        randomizeGateSequence(gateSequences[i])
     end
 end
 
 return {
-    name = 'SeqMarkov',
-    author = 'Thorinside | Claude | ChatGPT o3-mini-high',
+    name = "AE Sequencer",
+    author = "Andras Eichstaedt / Thorinside / 4o",
+
     init = function(self)
-        local params = init_params(self)
-        return params
+        initSequences()
+        return {
+            -- Three inputs:
+            -- 1 = clock (stepping), 2 = reset trigger, 3 = global randomize trigger
+            inputs = {kGate, kTrigger, kTrigger},
+            outputs = {kStepped, kGate},
+            inputNames = {"Clock", "Reset", "Randomize"},
+            outputNames = {"V/Oct", "Gate"},
+            parameters = {
+                {"CV Sequence", 1, NUM_SEQUENCES, 1, kInt},
+                {"Gate Sequence", 1, NUM_SEQUENCES, 1, kInt},
+                {"CV Steps", 1, MAX_STEPS, 8, kInt},
+                {"Min CV", -10, 10, -1, kVolts}, {"Max CV", -10, 10, 1, kVolts},
+                {"Polarity", {"Positive", "Bipolar", "Negative"}, 2, kEnum},
+                {"Bit Depth (CV)", 2, 16, 16, kInt},
+                {"Gate Steps", 1, MAX_STEPS, 16, kInt},
+                {"Threshold", 1, 100, 50, kPercent},
+                {"Gate Length", 5, 1000, 100, kMs}
+            }
+        }
     end,
 
     gate = function(self, input, rising)
-        ensure_initialized(self)
+        local voltIdx = self.parameters[1]
+        local gateIdx = self.parameters[2]
         if input == 1 and rising then
-            currentStep = currentStep + 1
-            if currentStep > NUM_STEPS then
-                currentStep = 1
-                if math.random() < (self.parameters[6] / 100) then
-                    mutationPending = true
-                end
+            -- Advance voltage sequence.
+            local voltSeq = voltageSequences[voltIdx]
+            voltSeq.stepCount = self.parameters[3]
+            voltSeq.currentStep = voltSeq.currentStep + 1
+            if voltSeq.currentStep > voltSeq.stepCount then
+                voltSeq.currentStep = 1
             end
-            if mutationPending and currentStep == 1 then
-                mutate_sequence(self)
-                mutationPending = false
+            updateVoltageCached(voltSeq, self.parameters[7], self.parameters[4],
+                                self.parameters[5], self.parameters[6])
+
+            -- Advance gate sequence.
+            local gateSeq = gateSequences[gateIdx]
+            gateSeq.numSteps = self.parameters[8]
+            gateSeq.stepIndex = gateSeq.stepIndex + 1
+            if gateSeq.stepIndex > gateSeq.numSteps then
+                gateSeq.stepIndex = 1
             end
-            if regeneratePending and currentStep == 1 then
-                init_sequence(self)
-                lastNoteIndex = 1
-                generate_sequence(self)
-                regeneratePending = false
-            end
-            if randomizePending and currentStep == 1 then
-                generate_sequence(self)
-                randomizePending = false
+            if gateSeq.steps[gateSeq.stepIndex] >= self.parameters[9] then
+                gateSeq.gateRemainingSteps = self.parameters[10]
             end
         end
     end,
 
     trigger = function(self, input)
-        ensure_initialized(self)
+        local voltIdx = self.parameters[1]
+        local gateIdx = self.parameters[2]
         if input == 2 then
-            currentStep = 1
+            -- Reset active voltage sequence.
+            voltageSequences[voltIdx].currentStep = 1
+            updateVoltageCached(voltageSequences[voltIdx], self.parameters[7],
+                                self.parameters[4], self.parameters[5],
+                                self.parameters[6])
+            -- Reset active gate sequence.
+            gateSequences[gateIdx].stepIndex = 1
         elseif input == 3 then
-            generate_sequence(self)
-        elseif input == 4 then
-            init_sequence(self)
-            lastNoteIndex = 1
-            generate_sequence(self)
-            currentStep = 1
+            -- Global randomize all sequences.
+            globalRandomize(self)
         end
-    end,
-
-    encoder1Turn = function(self, value)
-        algorithm = getCurrentAlgorithm(self)
-        setParameter(self, self.parameterOffset + 2, self.parameters[2] + value)
-    end,
-
-    encoder2Turn = function(self, value)
-        algorithm = getCurrentAlgorithm(self)
-        setParameter(self, self.parameterOffset + 1, self.parameters[1] + value)
-    end,
-
-    pot1Turn = function(self, value)
-        algorithm = getCurrentAlgorithm(self)
-        setParameterNormalized(self, self.parameterOffset + 6, value)
-    end,
-
-    pot2Turn = function(self, value)
-        algorithm = getCurrentAlgorithm(self)
-        setParameterNormalized(self, self.parameterOffset + 3, value)
-    end,
-
-    pot2Push = function(self, value) exit() end,
-
-    pot3Turn = function(self, value)
-        algorithm = getCurrentAlgorithm(self)
-        setParameterNormalized(self, self.parameterOffset + 5, value)
-    end,
-
-    encoder1Push = function(self, value) generate_sequence(self) end,
-
-    encoder2Push = function(self, value)
-        init_sequence(self)
-        lastNoteIndex = 1
-        generate_sequence(self)
-        currentStep = 1
     end,
 
     step = function(self, dt, inputs)
-        ensure_initialized(self)
-        if self.parameters[8] == 1 then randomizePending = true end
-        if self.parameters[9] == 1 then regeneratePending = true end
-        if sequence[currentStep] and sequence[currentStep].active == 1 then
-            outputTable[1] = sequence[currentStep].pitch / 12
-            outputTable[2] = inputs[1] > 1.0 and 5.0 or 0.0
-            outputTable[3] = (sequence[currentStep].velocity / 127) * 10.0
-        else
-            outputTable[1] = sequence[currentStep].pitch / 12
-            outputTable[2] = 0.0
-            outputTable[3] = 0.0
+        local voltIdx = self.parameters[1]
+        local gateIdx = self.parameters[2]
+        if voltIdx ~= lastActiveVoltIndex then
+            lastActiveVoltIndex = voltIdx
+            updateVoltageCached(voltageSequences[voltIdx], self.parameters[7],
+                                self.parameters[4], self.parameters[5],
+                                self.parameters[6])
         end
-        return outputTable
+        OUTPUT_BUFFER[1] = voltageSequences[voltIdx].cachedVoltage
+        local gateSeq = gateSequences[gateIdx]
+        if gateSeq.gateRemainingSteps > 0 then
+            gateSeq.gateRemainingSteps = gateSeq.gateRemainingSteps - 1
+            OUTPUT_BUFFER[2] = 5
+        else
+            OUTPUT_BUFFER[2] = 0
+        end
+        return OUTPUT_BUFFER
     end,
 
+    ui = function(self) return true end,
+
+    encoder2Push = function(self) globalRandomize(self) end,
+
+    pot2Turn = function(self, x)
+        local alg = getCurrentAlgorithm()
+        local p = self.parameterOffset + 1 + x * 10.5
+        focusParameter(alg, p)
+    end,
+
+    pot3Turn = function(self, x) standardPot3Turn(x) end,
+
     draw = function(self)
-        ensure_initialized(self)
-        local status, err = pcall(function() draw_seq(self) end)
-        if not status then debug("Error in draw: " .. tostring(err)) end
+        local voltIdx = self.parameters[1]
+        local gateIdx = self.parameters[2]
+        -- Leave top 20px unused (for header)
+
+        drawTinyText(120, 15, "Hi Anders...")
+        -- Draw gate sequence blocks starting at y = 25.
+        local gateSeq = gateSequences[gateIdx]
+        local numGate = self.parameters[8]
+        local gateBlockWidth = math.floor(256 / numGate)
+        local gateBlockHeight = 10
+        local gateY = 25
+        for i = 1, numGate do
+            local x = (i - 1) * gateBlockWidth
+            -- If this is the active gate step, draw a white border first.
+            if i == gateSeq.stepIndex then
+                drawRectangle(x - 1, gateY - 1, x + gateBlockWidth - 1,
+                              gateY + gateBlockHeight + 1, 15)
+            end
+            -- Draw the block.
+            if gateSeq.steps[i] >= self.parameters[9] then
+                drawRectangle(x, gateY, x + gateBlockWidth - 2,
+                              gateY + gateBlockHeight, 15)
+            else
+                drawRectangle(x, gateY, x + gateBlockWidth - 2,
+                              gateY + gateBlockHeight, 3)
+            end
+        end
+
+        -- Draw voltage sequence blocks starting at y = 40.
+        local voltSeq = voltageSequences[voltIdx]
+        local numVolt = self.parameters[3]
+        local voltBlockWidth = math.floor(256 / numVolt)
+        local voltBlockHeight = 10
+        local voltY = 40
+        local effectiveMin, effectiveMax =
+            getEffectiveRange(self.parameters[4], self.parameters[5],
+                              self.parameters[6])
+        for i = 1, numVolt do
+            local x = (i - 1) * voltBlockWidth
+            local raw = voltSeq.steps[i]
+            local voltage
+            if self.parameters[6] == 2 then
+                voltage =
+                    (raw + 32768) / 65535 * (effectiveMax - effectiveMin) +
+                        effectiveMin
+            elseif self.parameters[6] == 1 then
+                voltage = (raw < 0 and 0 or raw) / 32767 *
+                              (effectiveMax - effectiveMin) + effectiveMin
+            elseif self.parameters[6] == 3 then
+                voltage = ((raw > 0 and 0 or raw) + 32768) / 32768 *
+                              (effectiveMax - effectiveMin) + effectiveMin
+            end
+            local norm = (voltage - effectiveMin) /
+                             (effectiveMax - effectiveMin)
+            if norm < 0 then norm = 0 end
+            if norm > 1 then norm = 1 end
+            local colorIndex = math.floor(norm * 14) + 1
+            if i == voltSeq.currentStep then
+                drawRectangle(x - 1, voltY - 1, x + voltBlockWidth - 1,
+                              voltY + voltBlockHeight + 1, 15)
+            end
+            drawRectangle(x, voltY, x + voltBlockWidth - 2,
+                          voltY + voltBlockHeight, colorIndex)
+        end
     end
 }
