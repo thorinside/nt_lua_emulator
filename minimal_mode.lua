@@ -9,6 +9,7 @@ local display = nil
 local scriptParameters = nil
 local currentParameter = 1
 local errorMessage = nil
+local uiFont = nil -- Font for UI elements
 
 -- Initialize the module
 function MinimalMode.init(displayModule, params)
@@ -16,6 +17,17 @@ function MinimalMode.init(displayModule, params)
     scriptParameters = params
     currentParameter = 1
     isActive = false
+
+    -- Try to load Noto Sans font for Unicode arrow characters
+    local fontSuccess, fontErr = pcall(function()
+        uiFont = love.graphics.newFont("fonts/Gidole-Regular.ttf", 12)
+    end)
+
+    if not fontSuccess then
+        print("Noto Sans font loading failed: " .. tostring(fontErr))
+        -- Fall back to default font
+        uiFont = love.graphics.newFont(10)
+    end
 end
 
 -- Activate minimal mode
@@ -132,13 +144,24 @@ function MinimalMode.draw()
             valueStr = string.format("%.2f", paramValue)
         end
 
+        -- Use the custom font for UI text
+        local prevFont = love.graphics.getFont()
+        love.graphics.setFont(uiFont)
+
         -- Draw parameter info
         love.graphics.printf(paramName .. ": " .. valueStr, 5, displayH - 17,
                              displayW - 10, "left")
 
-        -- Draw navigation hint
-        love.graphics.printf("◄ ► to select  ▲ ▼ to adjust", 5,
+        -- Draw navigation hint with Unicode arrows
+        -- You can use any of these options depending on what your font supports:
+        -- "← → to select  ↑ ↓ to adjust"  -- Basic arrows
+        -- "◀ ▶ to select  ▲ ▼ to adjust"  -- Triangle arrows
+        -- "⬅ ➡ to select  ⬆ ⬇ to adjust"  -- Heavy arrows
+        love.graphics.printf("← → to select  ↑ ↓ to adjust", 5,
                              displayH - 17, displayW - 10, "right")
+
+        -- Restore previous font
+        love.graphics.setFont(prevFont)
     end
 
     -- Display error if needed
@@ -148,9 +171,17 @@ function MinimalMode.draw()
         love.graphics.setColor(1, 0.3, 0.3, 1)
         love.graphics.rectangle("line", 10, 10, displayW - 20, 40)
         love.graphics.setColor(1, 1, 1, 1)
+
+        -- Use the custom font for error message
+        local prevFont = love.graphics.getFont()
+        love.graphics.setFont(uiFont)
+
         love.graphics.print("Script error (Press F1 to exit minimal mode)", 10,
                             12)
         love.graphics.print(tostring(errorMessage):sub(1, 40), 10, 28)
+
+        -- Restore previous font
+        love.graphics.setFont(prevFont)
     end
 end
 
