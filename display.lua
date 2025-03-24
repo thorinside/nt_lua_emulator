@@ -12,19 +12,36 @@ local config = {
     scaling = 4,
     baseColor = {0, 1, 1}, -- Electric blue tint (R, G, B)
     canvas = nil,
-    brightnessExp = 0.95, -- Exponent for brightness curve (< 1 makes dim colors brighter)
+    brightnessExp = 0.65, -- Exponent for brightness curve (< 1 makes dim colors brighter)
     pixelFont = nil, -- Will hold the PixelmixRegular font
     tinyFont = nil -- Will hold the tom-thumb font
 }
 
 -- Shared color calculation function with non-linear brightness adjustment
 local function calculateColor(colorValue)
-    local shade = math.max(colorValue, 0) / 15 -- Base brightness adjustment
-    shade = math.pow(shade, config.brightnessExp) -- Non-linear brightness curve
-    return {
-        shade * config.baseColor[1], shade * config.baseColor[2],
-        shade * config.baseColor[3]
-    }
+    -- Ensure we have a valid color value
+    if colorValue == nil then colorValue = 15 end
+
+    -- Debug color issues
+    if colorValue < 3 then
+        -- For very low color values, we need to ensure they're still visible
+        -- but maintain relative darkness
+        local shade = math.max(colorValue, 0.1) / 15
+        -- Use a less aggressive curve for very dark colors
+        shade = math.pow(shade, 0.5)
+        return {
+            shade * config.baseColor[1], shade * config.baseColor[2],
+            shade * config.baseColor[3], 1 -- Ensure alpha is always 1
+        }
+    else
+        -- Normal color processing for brighter colors
+        local shade = math.max(colorValue, 0) / 15 -- Base brightness adjustment
+        shade = math.pow(shade, config.brightnessExp) -- Non-linear brightness curve
+        return {
+            shade * config.baseColor[1], shade * config.baseColor[2],
+            shade * config.baseColor[3], 1 -- Ensure alpha is always 1
+        }
+    end
 end
 
 -- Initialize the display
@@ -64,7 +81,8 @@ function display.clear() love.graphics.clear(0, 0, 0, 1) end
 -- Draw a rectangle (filled)
 function display.drawRectangle(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    -- Make sure we set all color components including alpha
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
@@ -73,7 +91,7 @@ end
 -- Draw a smooth box (outlined)
 function display.drawSmoothBox(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
@@ -82,7 +100,7 @@ end
 -- Draw a box with minimum brightness (outlined)
 function display.drawBox(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
@@ -91,7 +109,7 @@ end
 -- Draw a smooth line
 function display.drawSmoothLine(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.line(x1 * config.scaling, y1 * config.scaling,
                        x2 * config.scaling, y2 * config.scaling)
 end
@@ -99,7 +117,7 @@ end
 -- Draw a line (handles single point cases as particles)
 function display.drawLine(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
 
     if math.floor(x1) == math.floor(x2) and math.floor(y1) == math.floor(y2) then
         -- Single point (particle) case
@@ -114,7 +132,7 @@ end
 -- Draw text
 function display.drawText(x, y, text, color)
     local col = calculateColor(color or 15)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
 
     -- Save current font
     local currentFont = love.graphics.getFont()
@@ -132,7 +150,7 @@ end
 -- Fill a rectangle
 function display.fillRectangle(x1, y1, x2, y2, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
@@ -141,7 +159,7 @@ end
 -- Draw a filled circle
 function display.fillCircle(x, y, radius, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.circle("fill", x * config.scaling, y * config.scaling,
                          radius * config.scaling)
 end
@@ -149,7 +167,7 @@ end
 -- Draw an outlined circle
 function display.drawCircle(x, y, radius, color)
     local col = calculateColor(color)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
     love.graphics.circle("line", x * config.scaling, y * config.scaling,
                          radius * config.scaling)
 end
@@ -165,14 +183,20 @@ end
 
 -- Render the display to the screen
 function display.render()
+    -- Save current color so we can restore it
+    local r, g, b, a = love.graphics.getColor()
+
     -- Draw to canvas
     love.graphics.setCanvas(config.canvas)
     -- We don't clear here, as that should be handled by the user
     love.graphics.setCanvas() -- Reset to default canvas
 
     -- Draw the canvas to the screen
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(1, 1, 1, 1) -- Always set to white for the canvas drawing
     love.graphics.draw(config.canvas, 0, 0)
+
+    -- Restore previous color
+    love.graphics.setColor(r, g, b, a)
 end
 
 -- Update the display (does nothing, but provided for API completeness)
@@ -186,7 +210,7 @@ function display.getConfig() return config end
 -- Draw text with tiny font (using tom-thumb.bdf)
 function display.drawTinyText(x, y, text, color)
     local col = calculateColor(color or 15)
-    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.setColor(col[1], col[2], col[3], col[4] or 1)
 
     -- Save current font
     local currentFont = love.graphics.getFont()
@@ -213,10 +237,7 @@ function display.createDrawingEnvironment()
         drawTinyText = display.drawTinyText,
         fillRectangle = display.fillRectangle,
         drawCircle = display.drawCircle,
-        fillCircle = display.fillCircle,
-        -- Constants that might be used by scripts
-        kBy10 = 10,
-        kVolts = 1
+        fillCircle = display.fillCircle
     }
 end
 

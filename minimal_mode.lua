@@ -124,6 +124,8 @@ function MinimalMode.draw()
     if not display then
         love.graphics.setColor(1, 0.3, 0.3, 1)
         love.graphics.print("ERROR: Display module not initialized", 10, 10)
+        -- Reset color before returning
+        love.graphics.setColor(1, 1, 1, 1)
         return
     end
 
@@ -133,6 +135,8 @@ function MinimalMode.draw()
         love.graphics.setColor(1, 0.3, 0.3, 1)
         love.graphics
             .print("ERROR: Display configuration not available", 10, 10)
+        -- Reset color before returning
+        love.graphics.setColor(1, 1, 1, 1)
         return
     end
 
@@ -197,6 +201,9 @@ function MinimalMode.draw()
         -- Restore previous font
         love.graphics.setFont(prevFont)
     end
+
+    -- Reset color to white when done
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 return MinimalMode

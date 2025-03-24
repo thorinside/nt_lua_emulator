@@ -1504,6 +1504,8 @@ end
 function M.draw()
     -- Reset line width for consistent drawing
     love.graphics.setLineWidth(1.0)
+    -- Reset color to white at the beginning to ensure a clean state
+    love.graphics.setColor(1, 1, 1, 1)
 
     -- 1) Set up the display canvas for script drawing
     display.clear()
@@ -1525,12 +1527,15 @@ function M.draw()
 
     -- Reset canvas
     love.graphics.setCanvas()
+    -- Reset color to white after canvas operations
+    love.graphics.setColor(1, 1, 1, 1)
 
     -- If in minimal mode, use minimal mode drawing
     if minimalModeEnabled then
         -- Use minimal mode display
         love.graphics.clear(0, 0, 0)
-        love.graphics.setColor(1, 1, 1)
+        -- Make sure color is white before rendering the display
+        love.graphics.setColor(1, 1, 1, 1)
         display.render()
 
         -- Call minimal mode's draw function
@@ -1538,8 +1543,8 @@ function M.draw()
     else
         -- Normal rendering with all UI elements
 
-        -- Render the display at the top of the window
-        love.graphics.setColor(1, 1, 1)
+        -- Make sure color is white before rendering the display
+        love.graphics.setColor(1, 1, 1, 1)
         display.render()
 
         -- Draw a border around the display area for better visualization
