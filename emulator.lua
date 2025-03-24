@@ -877,7 +877,23 @@ function M.load()
 
     -- Initialize minimal mode with display module
     if not minimalModeInitialized then
-        MinimalMode.init(display, scriptParameters)
+        MinimalMode.init(display, scriptParameters,
+                         function(paramIndex, newValue)
+            -- Update the parameter in scriptParameters
+            if scriptParameters and scriptParameters[paramIndex] then
+                scriptParameters[paramIndex].current = newValue
+                -- Update the script's parameters
+                if script and script.parameters then
+                    local param = scriptParameters[paramIndex]
+                    if param.type == "float" and param.scale then
+                        -- Apply scaling for float parameters when updating script
+                        script.parameters[paramIndex] = newValue / param.scale
+                    else
+                        script.parameters[paramIndex] = newValue
+                    end
+                end
+            end
+        end)
         minimalModeInitialized = true
     end
 
@@ -2334,18 +2350,16 @@ function M.mousemoved(x, y, dx, dy)
 
             elseif sp.type == "float" then
                 -- Float parameters use scaled values
-                local range = sp.displayMax - sp.displayMin
+                local range = sp.max - sp.min
                 local stepSize = -y * (range / 200) -- Adjust sensitivity based on parameter range
 
                 if isAutomated then
                     local newBaseVal = (sp.baseValue or sp.current) + stepSize
-                    newBaseVal = math.max(sp.displayMin,
-                                          math.min(sp.displayMax, newBaseVal))
+                    newBaseVal = math.max(sp.min, math.min(sp.max, newBaseVal))
                     sp.baseValue = newBaseVal
                 else
                     local newVal = sp.current + stepSize
-                    newVal = math.max(sp.displayMin,
-                                      math.min(sp.displayMax, newVal))
+                    newVal = math.max(sp.min, math.min(sp.max, newVal))
                     sp.current = newVal
                 end
 
