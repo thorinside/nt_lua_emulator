@@ -1,14 +1,14 @@
 {
-  "minimalMode":false,
-  "script":{
-    "path":"test_script.lua"
-  },
   "osc":{
+    "sendInterval":0.001,
     "host":"127.0.0.1",
     "port":8000,
     "address":"/dnt",
     "outputFormat":"single",
-    "sendInterval":0.001,
     "enabled":false
-  }
+  },
+  "script":{
+    "path":"/Users/nealsanche/github/forks/distingNT/lua/bouncy.lua"
+  },
+  "minimalMode":false
 }

@@ -51,7 +51,7 @@ function display.init(options)
                                             config.height * config.scaling)
 
     -- Configure default filters
-    love.graphics.setDefaultFilter("nearest", "nearest")
+    love.graphics.setDefaultFilter("linear", "linear", 8)
 
     -- Load the fonts
     -- Regular font for drawText
