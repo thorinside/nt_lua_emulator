@@ -1,7 +1,7 @@
 {
   "minimalMode":false,
   "script":{
-    "path":"/Users/nealsanche/github/forks/distingNT/lua/bouncy.lua"
+    "path":"test_script.lua"
   },
   "osc":{
     "host":"127.0.0.1",

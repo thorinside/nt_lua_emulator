@@ -1,28 +1,48 @@
 {
-  "clockBPM":134,
+  "clockBPM":110,
   "window":{
     "width":768,
     "height":600,
-    "x":372,
-    "y":191
-  },
-  "outputs":{
-    "2":2,
-    "1":1
-  },
-  "inputs":{
-    "2":2,
-    "3":3,
-    "1":1
+    "x":696,
+    "y":186
   },
   "scriptPath":"test_script.lua",
+  "inputs":{
+    "1":1,
+    "2":2,
+    "3":3
+  },
+  "outputs":{
+    "1":1,
+    "2":2
+  },
   "inputModes":{
+    "5":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "6":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "7":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
     "8":{
       "polarity":0,
       "scaling":1,
       "clock":false
     },
-    "12":{
+    "9":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "10":{
       "polarity":0,
       "scaling":1,
       "clock":false
@@ -32,7 +52,12 @@
       "scaling":1,
       "clock":false
     },
-    "5":{
+    "12":{
+      "polarity":0,
+      "scaling":1,
+      "clock":false
+    },
+    "1":{
       "polarity":0,
       "scaling":1,
       "clock":false
@@ -51,32 +76,7 @@
       "polarity":0,
       "scaling":1,
       "clock":false
-    },
-    "10":{
-      "polarity":0,
-      "scaling":1,
-      "clock":false
-    },
-    "1":{
-      "polarity":0,
-      "scaling":1,
-      "clock":true
-    },
-    "7":{
-      "polarity":0,
-      "scaling":1,
-      "clock":false
-    },
-    "6":{
-      "polarity":0,
-      "scaling":1,
-      "clock":false
-    },
-    "9":{
-      "polarity":0,
-      "scaling":1,
-      "clock":false
     }
   },
-  "oscEnabled":true
+  "oscEnabled":false
 }
