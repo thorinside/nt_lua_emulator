@@ -451,6 +451,74 @@ local function loadScript(scriptPath)
     local filePath = scriptPath
     local newScript
 
+    -- Create the drawing environment FIRST - before any script code runs
+    local drawingEnv = display.createDrawingEnvironment()
+
+    -- Add drawing functions to the global environment before loading script
+    for funcName, func in pairs(drawingEnv) do
+        -- Make drawing functions available globally
+        _G[funcName] = func
+    end
+
+    -- Add custom drawing functions not provided by the display module
+
+    -- Standard behavior for pot3 turning
+    _G.standardPot3Turn = function(x)
+        -- Standard behavior for the third potentiometer
+        -- In the real device, this might scroll through parameters
+        print("Pot 3 turned: " .. x)
+    end
+
+    -- Add exit function for compatibility
+    _G.exit = function() love.event.quit() end
+
+    -- Add compatibility functions for test scripts
+    _G.getCurrentAlgorithm = function() return 0 end
+    _G.getCurrentParameter = function() return 0 end
+
+    -- Add debug function for scripts
+    _G.debug = function(str) print(tostring(str)) end
+
+    -- Screen coordinate conversion functions
+    _G.toScreenX = function(x) return 1.0 + 2.5 * (x + 10.0) end
+
+    _G.toScreenY = function(y)
+        -- No need for special scaling here - the parameter system will handle
+        -- the kBy10 scaling when setting/getting parameters
+        return 12.0 + 2.5 * (10.0 - y)
+    end
+
+    -- Make parameterOffset available both as a function and a property
+    _G.parameterOffset = 0
+
+    -- Focus on a parameter (for pot/encoder interactions)
+    _G.focusParameter = function(algorithm, parameter)
+        -- In a real device, this would focus UI on a specific parameter
+        -- For the emulator, we'll just log it
+        print("Focusing on parameter " .. parameter .. " of algorithm " ..
+                  algorithm)
+        -- We could potentially store the current focused parameter for display
+        -- but for now this is just a stub
+    end
+
+    -- Set a parameter value
+    _G.setParameter = function(algorithm, parameter, value)
+        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
+        -- Adjust the parameter index based on parameterOffset
+        local paramIndex = parameter - newScript.parameterOffset
+        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
+            local sp = newScriptParameters[paramIndex]
+            if sp then
+                -- Ensure the value is within bounds
+                if sp.type == "integer" then
+                    value = math.floor(value)
+                end
+                value = math.max(sp.min, math.min(sp.max, value))
+                sp.current = value
+            end
+        end
+    end
+
     if scriptPath:sub(1, 1) == "/" then
         -- For absolute paths, read the file directly
         local file = io.open(scriptPath, "r")
@@ -508,163 +576,8 @@ local function loadScript(scriptPath)
     local newScriptParameters = {}
 
     -- Provide drawing environment to script
-    local drawingEnv = display.createDrawingEnvironment()
-    for funcName, func in pairs(drawingEnv) do
-        -- Make drawing functions available to the script
-        _G[funcName] = func
-    end
-
-    -- Add custom drawing functions not provided by the display module
-
-    -- Standard behavior for pot3 turning
-    _G.standardPot3Turn = function(x)
-        -- Standard behavior for the third potentiometer
-        -- In the real device, this might scroll through parameters
-        print("Pot 3 turned: " .. x)
-    end
-
-    -- Add exit function for compatibility
-    _G.exit = function() love.event.quit() end
-
-    -- Add compatibility functions for test scripts
-    _G.getCurrentAlgorithm = function() return 0 end
-    _G.getCurrentParameter = function() return 0 end
-
-    -- Add debug function for scripts
-    _G.debug = function(str) print(tostring(str)) end
-
-    -- Screen coordinate conversion functions
-    _G.toScreenX = function(x) return 1.0 + 2.5 * (x + 10.0) end
-
-    _G.toScreenY = function(y)
-        -- No need for special scaling here - the parameter system will handle
-        -- the kBy10 scaling when setting/getting parameters
-        return 12.0 + 2.5 * (10.0 - y)
-    end
-
-    -- Make parameterOffset available both as a function and a property
-    _G.parameterOffset = 0
-
-    -- Focus on a parameter (for pot/encoder interactions)
-    _G.focusParameter = function(algorithm, parameter)
-        -- In a real device, this would focus UI on a specific parameter
-        -- For the emulator, we'll just log it
-        print("Focusing on parameter " .. parameter .. " of algorithm " ..
-                  algorithm)
-        -- We could potentially store the current focused parameter for display
-        -- but for now this is just a stub
-    end
-
-    -- Set a parameter value
-    _G.setParameter = function(algorithm, parameter, value)
-        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
-        -- Adjust the parameter index based on parameterOffset
-        local paramIndex = parameter - newScript.parameterOffset
-        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
-            local sp = newScriptParameters[paramIndex]
-            if sp then
-                -- Ensure the value is within bounds
-                if sp.type == "integer" then
-                    value = math.floor(
-                                math.max(sp.min, math.min(sp.max, value)) + 0.5)
-                elseif sp.type == "float" then
-                    value = math.max(sp.displayMin,
-                                     math.min(sp.displayMax, value))
-                elseif sp.type == "enum" then
-                    value = math.max(1, math.min(#sp.values,
-                                                 math.floor(value + 0.5)))
-                end
-
-                -- Set the value
-                sp.current = value
-
-                -- Update the script's parameters immediately
-                helpers.updateScriptParameters(newScriptParameters, newScript)
-
-                print("Parameter " .. paramIndex .. " set to " .. value)
-            end
-        end
-    end
-
-    -- Set a parameter using a normalized value (0.0-1.0)
-    _G.setParameterNormalized = function(algorithm, parameter, normValue)
-        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
-        -- Adjust the parameter index based on parameterOffset
-        local paramIndex = parameter - newScript.parameterOffset
-        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
-            local sp = newScriptParameters[paramIndex]
-            if sp then
-                normValue = math.max(0.0, math.min(1.0, normValue))
-
-                local value
-                if sp.type == "integer" or sp.type == "float" then
-                    -- Map normalized value to parameter range
-                    local range = sp.max - sp.min
-                    value = sp.min + (range * normValue)
-
-                    -- For integer parameters, round to nearest whole number
-                    if sp.type == "integer" then
-                        value = math.floor(value + 0.5)
-                    end
-                elseif sp.type == "enum" then
-                    -- Map normalized value to enum indices
-                    local count = #sp.values
-                    value = math.floor(1 + (normValue * (count - 1)) + 0.5)
-                end
-
-                -- Set the value
-                sp.current = value
-
-                -- Update the script's parameters immediately
-                helpers.updateScriptParameters(newScriptParameters, newScript)
-
-                print("Parameter " .. paramIndex .. " set to " .. value ..
-                          " (normalized " .. normValue .. ")")
-            end
-        end
-    end
-
-    -- Get a parameter value
-    _G.getParameter = function(algorithm, parameter)
-        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
-        -- Adjust the parameter index based on parameterOffset
-        local paramIndex = parameter - newScript.parameterOffset
-        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
-            local sp = newScriptParameters[paramIndex]
-            if sp then return sp.current end
-        end
-        return nil
-    end
-
-    -- Get voltage on a bus at an algorithm's input
-    _G.getBusVoltage = function(algorithm, busIndex)
-        -- Ignore algorithm parameter and always use physical inputs
-        -- Convert from zero-based to one-based indexing
-        local adjustedBusIndex = busIndex + 1
-
-        if adjustedBusIndex >= 1 and adjustedBusIndex <= 12 then
-            -- Return the physical input voltage directly
-            return currentInputs[adjustedBusIndex]
-        end
-
-        -- Return 0 for out-of-range bus indices
-        print("getBusVoltage: Invalid bus index " .. busIndex)
-        return 0
-    end
-
-    -- Standard behavior for pot1 turning
-    _G.standardPot1Turn = function(x)
-        -- Standard behavior for the first potentiometer
-        -- In the real device, this might select parameter page
-        print("Pot 1 turned: " .. x)
-    end
-
-    -- Standard behavior for pot2 turning
-    _G.standardPot2Turn = function(x)
-        -- Standard behavior for the second potentiometer
-        -- In the real device, this might select parameter
-        print("Pot 2 turned: " .. x)
-    end
+    -- This section has been moved to the beginning of the function
+    -- No longer need to set up the drawing environment here
 
     if newScript.init then
         local initResult = safeScriptCall(newScript.init, newScript)
@@ -1509,11 +1422,11 @@ function M.draw()
 
     -- 1) Set up the display canvas for script drawing
     display.clear()
-    -- Start drawing to display's canvas
-    love.graphics.setCanvas(display.getConfig().canvas)
 
-    -- Clear the canvas explicitly to prevent pixels from staying lit
-    love.graphics.clear(0, 0, 0, 1)
+    -- Start drawing to display's canvas with clean state
+    love.graphics.push("all")
+    love.graphics.setCanvas(display.getConfig().canvas)
+    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
 
     -- Draw script content to display canvas with error handling
     if script and script.draw then
@@ -1525,8 +1438,10 @@ function M.draw()
         end
     end
 
-    -- Reset canvas
+    -- Reset canvas state
     love.graphics.setCanvas()
+    love.graphics.pop()
+
     -- Reset color to white after canvas operations
     love.graphics.setColor(1, 1, 1, 1)
 

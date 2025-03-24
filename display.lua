@@ -27,9 +27,9 @@ local function calculateColor(colorValue)
 
     -- For dark colors, use a more gentle curve to preserve distinction
     if colorValue <= 2 then
-        -- Use lighter exponent for very dark colors to keep them visible
-        -- but still distinguishable from each other
-        shade = math.pow(shade, 0.45)
+        -- Use a fixed minimum intensity for very dark colors to keep them visible
+        -- but still distinguishable from each other and from black
+        shade = 0.05 + (shade * 0.2) -- Minimum intensity of 0.05 with small scaling
     else
         -- Normal brightness curve for regular colors
         shade = math.pow(shade, config.brightnessExp)
@@ -50,8 +50,8 @@ function display.init(options)
     config.canvas = love.graphics.newCanvas(config.width * config.scaling,
                                             config.height * config.scaling)
 
-    -- Configure default filters
-    love.graphics.setDefaultFilter("linear", "linear", 8)
+    -- Configure default filters - use nearest filtering for pixel-perfect rendering
+    love.graphics.setDefaultFilter("nearest", "nearest")
 
     -- Load the fonts
     -- Regular font for drawText
@@ -77,41 +77,50 @@ function display.clear() love.graphics.clear(0, 0, 0, 1) end
 
 -- Draw a rectangle (filled)
 function display.drawRectangle(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw a smooth box (outlined)
 function display.drawSmoothBox(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw a box with minimum brightness (outlined)
 function display.drawBox(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw a smooth line
 function display.drawSmoothLine(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.line(x1 * config.scaling, y1 * config.scaling,
                        x2 * config.scaling, y2 * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw a line (handles single point cases as particles)
 function display.drawLine(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
 
@@ -123,15 +132,14 @@ function display.drawLine(x1, y1, x2, y2, color)
         love.graphics.line(x1 * config.scaling, y1 * config.scaling,
                            x2 * config.scaling, y2 * config.scaling)
     end
+    love.graphics.pop()
 end
 
 -- Draw text
 function display.drawText(x, y, text, color)
+    love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
-
-    -- Save current font
-    local currentFont = love.graphics.getFont()
 
     -- Use our pixel font
     love.graphics.setFont(config.pixelFont)
@@ -139,33 +147,38 @@ function display.drawText(x, y, text, color)
     -- Draw the text
     love.graphics.print(text, x * config.scaling, y * config.scaling)
 
-    -- Restore the previous font
-    love.graphics.setFont(currentFont)
+    love.graphics.pop()
 end
 
 -- Fill a rectangle
 function display.fillRectangle(x1, y1, x2, y2, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw a filled circle
 function display.fillCircle(x, y, radius, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.circle("fill", x * config.scaling, y * config.scaling,
                          radius * config.scaling)
+    love.graphics.pop()
 end
 
 -- Draw an outlined circle
 function display.drawCircle(x, y, radius, color)
+    love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.circle("line", x * config.scaling, y * config.scaling,
                          radius * config.scaling)
+    love.graphics.pop()
 end
 
 -- Set the base color for all drawing
@@ -179,8 +192,7 @@ end
 
 -- Render the display to the screen
 function display.render()
-    -- Save current color so we can restore it
-    local r, g, b, a = love.graphics.getColor()
+    love.graphics.push("all")
 
     -- Draw to canvas
     love.graphics.setCanvas(config.canvas)
@@ -191,8 +203,7 @@ function display.render()
     love.graphics.setColor(1, 1, 1, 1) -- Always set to white for the canvas drawing
     love.graphics.draw(config.canvas, 0, 0)
 
-    -- Restore previous color
-    love.graphics.setColor(r, g, b, a)
+    love.graphics.pop()
 end
 
 -- Update the display (does nothing, but provided for API completeness)
@@ -205,11 +216,9 @@ function display.getConfig() return config end
 
 -- Draw text with tiny font (using tom-thumb.bdf)
 function display.drawTinyText(x, y, text, color)
+    love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
-
-    -- Save current font
-    local currentFont = love.graphics.getFont()
 
     -- Use our tiny font
     love.graphics.setFont(config.tinyFont)
@@ -217,8 +226,7 @@ function display.drawTinyText(x, y, text, color)
     -- Draw the text
     love.graphics.print(text, x * config.scaling, y * config.scaling)
 
-    -- Restore the previous font
-    love.graphics.setFont(currentFont)
+    love.graphics.pop()
 end
 
 -- Create an environment with drawing functions for script sandboxing
@@ -233,7 +241,10 @@ function display.createDrawingEnvironment()
         drawTinyText = display.drawTinyText,
         fillRectangle = display.fillRectangle,
         drawCircle = display.drawCircle,
-        fillCircle = display.fillCircle
+        fillCircle = display.fillCircle,
+        -- Constants that might be used by scripts
+        kBy10 = 10,
+        kVolts = 1
     }
 end
 

@@ -296,90 +296,115 @@ end
 function FileDialog.draw()
     if not isOpen then return end
 
+    -- Get screen dimensions
     local screenWidth, screenHeight = love.graphics.getDimensions()
     local x = (screenWidth - width) / 2
     local y = (screenHeight - height) / 2
 
-    -- Save current graphics state
-    local r, g, b, a = love.graphics.getColor()
-    local prevFont = love.graphics.getFont()
+    -- Save entire graphics state
+    love.graphics.push()
 
     -- Draw background
     love.graphics.setColor(bgColor)
-    love.graphics.rectangle("fill", x, y, width, height, 4, 4)
+    love.graphics.rectangle("fill", x, y, width, height, 8, 8)
 
     -- Draw border
     love.graphics.setColor(borderColor)
-    love.graphics.rectangle("line", x, y, width, height, 4, 4)
+    love.graphics.rectangle("line", x, y, width, height, 8, 8)
 
     -- Draw title
     love.graphics.setFont(titleFont)
     love.graphics.setColor(fgColor)
-    love.graphics.printf("Select Script File", x, y + 10, width, "center")
+    love.graphics.printf("Select Script File", x, y + 15, width, "center")
 
     -- Draw current directory
     love.graphics.setFont(font)
+    love.graphics.setColor(0.7, 0.7, 0.7, 1)
     love.graphics.printf(currentDir, x + 10, y + 40, width - 20, "left")
 
     -- Draw separator
     love.graphics.setColor(borderColor)
-    love.graphics.line(x + 5, y + 60, x + width - 5, y + 60)
+    love.graphics.line(x + 10, y + 60, x + width - 10, y + 60)
+
+    -- Set scissor to clip file list
+    love.graphics.setScissor(x, y + 65, width, height - 95)
 
     -- Draw files and directories
-    love.graphics.setFont(font)
-    love.graphics.setScissor(x + 5, y + 65, width - 10, height - 95)
+    local yPos = y + 65 - scroll
+    local maxVisible = math.floor((height - 95) / itemHeight) + 1
 
-    for i, dir in ipairs(directories) do
-        local itemY = y + 65 + (i - 1) * itemHeight - scroll
-
-        -- Only draw if visible
-        if itemY + itemHeight > y + 65 and itemY < y + height - 30 then
-            -- Draw selection background
+    -- Draw directories first
+    for i, dirName in ipairs(directories) do
+        -- Only draw visible items for better performance
+        if yPos + itemHeight >= y + 65 and yPos <= y + height - 30 then
+            -- Highlight selection
             if i == selectedIndex then
                 love.graphics.setColor(selectionColor)
-                love.graphics.rectangle("fill", x + 5, itemY, width - 10,
+                love.graphics.rectangle("fill", x + 5, yPos, width - 10,
                                         itemHeight)
             end
 
             -- Draw directory name
             love.graphics.setColor(fgColor)
-            love.graphics.print("📁 " .. dir, x + 10, itemY + 4)
+            love.graphics.print("📁 " .. dirName, x + 10, yPos + 4)
         end
+
+        yPos = yPos + itemHeight
     end
 
-    for i, file in ipairs(files) do
-        local itemY = y + 65 + (#directories + i - 1) * itemHeight - scroll
-
-        -- Only draw if visible
-        if itemY + itemHeight > y + 65 and itemY < y + height - 30 then
-            -- Draw selection background
-            if #directories + i == selectedIndex then
+    -- Then draw files
+    for i, fileName in ipairs(files) do
+        -- Only draw visible items
+        if yPos + itemHeight >= y + 65 and yPos <= y + height - 30 then
+            -- Highlight selection
+            if i + #directories == selectedIndex then
                 love.graphics.setColor(selectionColor)
-                love.graphics.rectangle("fill", x + 5, itemY, width - 10,
+                love.graphics.rectangle("fill", x + 5, yPos, width - 10,
                                         itemHeight)
             end
 
             -- Draw file name
             love.graphics.setColor(fgColor)
-            love.graphics.print("📄 " .. file, x + 10, itemY + 4)
+            love.graphics.print("📄 " .. fileName, x + 10, yPos + 4)
+        end
+
+        yPos = yPos + itemHeight
+    end
+
+    -- Reset scissor
+    love.graphics.setScissor()
+
+    -- Draw scroll indicators if needed
+    if (#directories + #files) * itemHeight > height - 95 then
+        -- Draw bottom fade/shadow effect
+        if scroll < ((#directories + #files) * itemHeight) - (height - 95) then
+            love.graphics.setColor(0.1, 0.1, 0.1, 0.7)
+            love.graphics.rectangle("fill", x + 5, y + height - 35, width - 10,
+                                    5)
+        end
+
+        -- Draw top fade/shadow effect
+        if scroll > 0 then
+            love.graphics.setColor(0.1, 0.1, 0.1, 0.7)
+            love.graphics.rectangle("fill", x + 5, y + 65, width - 10, 5)
         end
     end
 
-    love.graphics.setScissor()
+    -- Draw button area background
+    love.graphics.setColor(0.15, 0.15, 0.15, 1)
+    love.graphics.rectangle("fill", x, y + height - 30, width, 30)
 
-    -- Draw instructions
-    love.graphics.setColor(borderColor)
-    love.graphics.line(x + 5, y + height - 30, x + width - 5, y + height - 30)
+    -- Draw help text
+    love.graphics.setColor(0.7, 0.7, 0.7, 1)
+    love.graphics.print("Select: Enter | Cancel: Esc | Toggle Filter: Ctrl+F",
+                        x + 10, y + height - 22)
 
-    love.graphics.setColor(fgColor)
-    love.graphics.printf(
-        "↑↓ Navigate    Enter: Select    Backspace: Back    Ctrl+F: Toggle Filter (" ..
-            (filterLua and "Lua Only" or "All Files") .. ")", x + 10,
-        y + height - 25, width - 20, "center")
+    -- Draw filter indicator
+    local filterText = filterLua and "Filter: Lua files" or "Filter: All files"
+    love.graphics.print(filterText, x + width - 120, y + height - 22)
 
-    -- Restore graphics state
-    love.graphics.setColor(r, g, b, a)
-    love.graphics.setFont(prevFont)
+    -- Restore entire graphics state
+    love.graphics.pop()
 end
 
 -- Check if dialog is open

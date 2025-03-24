@@ -410,9 +410,8 @@ function PathInputDialog.draw()
     -- Position near the top of the screen with a small margin
     local y = 20
 
-    -- Save current graphics state
-    local r, g, b, a = love.graphics.getColor()
-    local prevFont = love.graphics.getFont()
+    -- Save entire graphics state
+    love.graphics.push()
 
     -- Set font
     love.graphics.setFont(font)
@@ -427,119 +426,113 @@ function PathInputDialog.draw()
 
     -- Draw title
     love.graphics.setColor(fgColor)
-    love.graphics.print("Enter Script Path:", x + 10, y + 10)
+    love.graphics.printf("Enter Script Path", x, y + 5, width, "center")
 
     -- Draw input box
     love.graphics.setColor(0.2, 0.2, 0.2, 1)
-    love.graphics.rectangle("fill", x + 10, y + 35, width - 20, 30, 2, 2)
+    love.graphics.rectangle("fill", x + 10, y + 30, width - 20, 30, 2, 2)
+
+    -- Draw input box border
+    love.graphics.setColor(borderColor)
+    love.graphics.rectangle("line", x + 10, y + 30, width - 20, 30, 2, 2)
 
     -- Draw input text
     love.graphics.setColor(fgColor)
-    love.graphics.printf(inputText, x + 15, y + 41, width - 30, "left")
+    love.graphics.printf(inputText, x + 15, y + 36, width - 30, "left")
 
     -- Draw cursor
     if showCursor then
-        local cursorX = x + 15
-        if cursorPosition > 0 then
-            local textWidth = font:getWidth(inputText:sub(1, cursorPosition))
-            cursorX = x + 15 + textWidth
-        end
+        local textWidth = font:getWidth(inputText:sub(1, cursorPosition))
         love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.rectangle("fill", cursorX, y + 41, 2, font:getHeight())
+        love.graphics.rectangle("fill", x + 15 + textWidth, y + 36, 2,
+                                font:getHeight())
     end
 
-    -- Draw help text at the bottom of the dialog
-    love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
-    local smallFont = love.graphics.newFont(10)
-    love.graphics.setFont(smallFont)
-    love.graphics.printf(
-        "Tab: Complete | ↑↓: Navigate | Enter: Select | Esc: Cancel",
-        x + 10, y + height - 18, width - 20, "center")
-    love.graphics.setFont(font)
-
-    -- Draw completions if available
+    -- Draw completions if any
     if #completions > 0 then
         local completionsY = y + height + 5
-
-        -- Calculate maximum height for completions based on window height
-        -- Leave a small margin at the bottom of the screen
         local maxCompletionsHeight = screenHeight - completionsY - 20
-
-        -- Calculate max number of rows that can fit
         local maxRows = math.floor(maxCompletionsHeight / completionHeight)
-
-        -- Limit to actual number of completions
         local visibleRows = math.min(maxRows, #completions)
 
-        -- Ensure selected item is visible
-        ensureSelectedVisible(visibleRows)
-
-        -- Calculate actual completions area height
+        -- Set completion list dimensions
+        local completionsWidth = width
         local completionsHeight = visibleRows * completionHeight
 
-        -- Draw completions background
+        -- Draw completion list background
         love.graphics.setColor(completionColor)
-        love.graphics.rectangle("fill", x, completionsY, width,
+        love.graphics.rectangle("fill", x, completionsY, completionsWidth,
                                 completionsHeight, 4, 4)
 
-        -- Draw completions border
+        -- Draw completion list border
         love.graphics.setColor(borderColor)
-        love.graphics.rectangle("line", x, completionsY, width,
+        love.graphics.rectangle("line", x, completionsY, completionsWidth,
                                 completionsHeight, 4, 4)
 
-        -- Set scissor to clip completions
-        love.graphics.setScissor(x, completionsY, width, completionsHeight)
-
-        -- Draw completions
+        -- Draw visible completions
         for i = 1, visibleRows do
-            local completionIndex = i + completionsScrollPosition
-            if completionIndex <= #completions then
-                local completion = completions[completionIndex]
-                local itemY = completionsY + (i - 1) * completionHeight
+            local idx = i + completionsScrollPosition
+            if idx <= #completions then
+                local completion = completions[idx]
+                local isSelected = idx == selectedCompletion
 
-                -- Draw selection background
-                if completionIndex == selectedCompletion then
+                -- Draw selection highlight
+                if isSelected then
                     love.graphics.setColor(selectedCompletionColor)
-                    love.graphics.rectangle("fill", x, itemY, width,
+                    love.graphics.rectangle("fill", x + 2, completionsY +
+                                                (i - 1) * completionHeight,
+                                            completionsWidth - 4,
                                             completionHeight)
                 end
 
-                -- Draw completion text
-                love.graphics.setColor(fgColor)
-                if completion.isDirectory then
-                    love.graphics.print("📁 " .. completion.displayName,
-                                        x + 10, itemY + 5)
+                -- Draw completion text with appropriate color
+                if isSelected then
+                    love.graphics.setColor(1, 1, 1, 1) -- White text for selected item
                 else
-                    love.graphics.print("📄 " .. completion.displayName,
-                                        x + 10, itemY + 5)
+                    love.graphics.setColor(fgColor)
                 end
+
+                -- Show icon based on if it's a file or directory
+                local icon = completion.isDirectory and "📁 " or "📄 "
+                love.graphics.print(icon .. completion.displayName, x + 10,
+                                    completionsY + (i - 1) * completionHeight +
+                                        5)
             end
         end
 
         -- Draw scroll indicators if needed
-        if completionsScrollPosition > 0 then
-            love.graphics.setColor(1, 1, 1, 0.7)
-            love.graphics.polygon("fill", x + width / 2 - 10, completionsY + 10,
-                                  x + width / 2, completionsY + 5,
-                                  x + width / 2 + 10, completionsY + 10)
+        if #completions > visibleRows then
+            love.graphics.setColor(0.7, 0.7, 0.7, 0.8) -- Light gray, semi-transparent
+            -- Up indicator (if not at top)
+            if completionsScrollPosition > 0 then
+                love.graphics.polygon("fill", x + completionsWidth / 2 - 10,
+                                      completionsY + 5,
+                                      x + completionsWidth / 2 + 10,
+                                      completionsY + 5,
+                                      x + completionsWidth / 2, completionsY - 5)
+            end
+            -- Down indicator (if not at bottom)
+            if completionsScrollPosition + visibleRows < #completions then
+                love.graphics.polygon("fill", x + completionsWidth / 2 - 10,
+                                      completionsY + completionsHeight - 5,
+                                      x + completionsWidth / 2 + 10,
+                                      completionsY + completionsHeight - 5,
+                                      x + completionsWidth / 2,
+                                      completionsY + completionsHeight + 5)
+            end
         end
-
-        if completionsScrollPosition + visibleRows < #completions then
-            love.graphics.setColor(1, 1, 1, 0.7)
-            love.graphics.polygon("fill", x + width / 2 - 10,
-                                  completionsY + completionsHeight - 10,
-                                  x + width / 2,
-                                  completionsY + completionsHeight - 5,
-                                  x + width / 2 + 10,
-                                  completionsY + completionsHeight - 10)
-        end
-
-        love.graphics.setScissor()
     end
 
-    -- Restore graphics state
-    love.graphics.setColor(r, g, b, a)
-    love.graphics.setFont(prevFont)
+    -- Draw help text at the bottom
+    love.graphics.setColor(0.7, 0.7, 0.7, 0.8) -- Light gray, semi-transparent
+    local helpFont = love.graphics.newFont(10)
+    love.graphics.setFont(helpFont)
+    love.graphics.printf(
+        "Tab: Complete | ↑↓: Navigate | Enter: Select | Esc: Cancel", x,
+        y + height - 18, width, "center")
+
+    -- Restore entire graphics state
+    love.graphics.pop()
 end
 
 -- Check if dialog is open
@@ -567,3 +560,4 @@ end
 
 -- Expose the module
 return PathInputDialog
+
