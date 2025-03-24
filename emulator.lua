@@ -148,6 +148,25 @@ local errorNotification = {
     targetAlpha = 0
 }
 
+-- State for temporary notifications
+local notification = {
+    active = false,
+    message = "",
+    time = 0,
+    duration = 2, -- seconds to show notification
+    targetAlpha = 0.0,
+    alpha = 0.0
+}
+
+-- Function to show notifications
+local function showNotification(message)
+    notification.active = true
+    notification.message = message
+    notification.time = 0
+    notification.targetAlpha = 1.0
+    print("Info: " .. message)
+end
+
 -- Function to show error notifications
 local function showErrorNotification(message)
     errorNotification.active = true
@@ -850,7 +869,11 @@ local function checkScriptModified(path)
 end
 
 -- Add a variable to track minimal mode state
-local minimalMode = false
+local minimalModeEnabled = false
+
+-- Initialize minimal mode
+local MinimalMode = require("minimal_mode")
+local minimalModeInitialized = false
 
 -- At the end of the function M.load(), add:
 function M.load()
@@ -939,15 +962,18 @@ function M.load()
     -- Try to load saved state, or create default mappings if no state exists
     if not loadIOState() then createDefaultMappings() end
 
-    -- Initialize minimal mode
-    local cfg = config.load()
-    MinimalMode.init(display, scriptParameters)
+    -- Initialize minimal mode with display module
+    if not minimalModeInitialized then
+        MinimalMode.init(display, scriptParameters)
+        minimalModeInitialized = true
+    end
 
     -- Set initial state from config
-    minimalMode = cfg.minimalMode or false
+    local cfg = config.load()
+    minimalModeEnabled = cfg and cfg.minimalMode or false
 
     -- Calculate correct window size based on minimal mode
-    if minimalMode then
+    if minimalModeEnabled then
         MinimalMode.activate()
         -- Set window to display size only
         local config = display.getConfig()
@@ -974,10 +1000,10 @@ function M.update(dt)
     end
 
     -- Update controls active state based on current overlay and minimal mode
-    controls.setActive(activeOverlay == "controls" and not minimalMode)
+    controls.setActive(activeOverlay == "controls" and not minimalModeEnabled)
 
     -- If in minimal mode, update it
-    if minimalMode then
+    if minimalModeEnabled then
         -- Update parameter references in minimal mode
         MinimalMode.setParameters(scriptParameters)
         MinimalMode.update(dt)
@@ -1501,7 +1527,7 @@ function M.draw()
     love.graphics.setCanvas()
 
     -- If in minimal mode, use minimal mode drawing
-    if minimalMode then
+    if minimalModeEnabled then
         -- Use minimal mode display
         love.graphics.clear(0, 0, 0)
         love.graphics.setColor(1, 1, 1)
@@ -1706,6 +1732,43 @@ function M.draw()
                 end
             end
         end
+
+        -- Draw regular notification if active
+        if notification.active then
+            -- Update notification alpha for fade in/out
+            notification.alpha = notification.alpha +
+                                     (notification.targetAlpha -
+                                         notification.alpha) * 0.01 * 5
+
+            -- Background rectangle
+            love.graphics.setColor(0.1, 0.1, 0.1, notification.alpha * 0.9)
+            local notifWidth = 400
+            local notifHeight = 60
+            local notifX = (love.graphics.getWidth() - notifWidth) / 2
+            local notifY = 100
+            love.graphics.rectangle("fill", notifX, notifY, notifWidth,
+                                    notifHeight, 8, 8)
+
+            -- Border
+            love.graphics.setColor(0.3, 0.7, 0.9, notification.alpha * 0.9)
+            love.graphics.rectangle("line", notifX, notifY, notifWidth,
+                                    notifHeight, 8, 8)
+
+            -- Text
+            love.graphics.setColor(1, 1, 1, notification.alpha)
+            love.graphics.setFont(fontDefault)
+            love.graphics.printf(notification.message, notifX + 10, notifY + 20,
+                                 notifWidth - 20, "center")
+
+            -- Update notification time
+            notification.time = notification.time + 0.01
+            if notification.time > notification.duration then
+                notification.targetAlpha = 0
+                if notification.alpha < 0.01 then
+                    notification.active = false
+                end
+            end
+        end
     end
 end
 
@@ -1713,9 +1776,9 @@ end
 function M.keypressed(key)
     -- F1 toggles minimal mode
     if key == "f1" then
-        minimalMode = not minimalMode
+        minimalModeEnabled = not minimalModeEnabled
 
-        if minimalMode then
+        if minimalModeEnabled then
             MinimalMode.activate()
             -- Save window position
             local x, y = love.window.getPosition()
@@ -1744,16 +1807,16 @@ function M.keypressed(key)
             love.window.setPosition(x, y)
         end
 
-        -- Save minimalMode to config
+        -- Save minimalModeEnabled to config
         local cfg = config.load()
-        cfg.minimalMode = minimalMode
+        cfg.minimalMode = minimalModeEnabled
         config.save(cfg)
 
         return
     end
 
     -- Handle key in minimal mode if active
-    if minimalMode then
+    if minimalModeEnabled then
         if MinimalMode.keypressed(key) then
             return -- Key was handled by minimal mode
         end
@@ -1762,7 +1825,7 @@ function M.keypressed(key)
     -- Continue with normal key handling
     if key == "space" then
         -- Only toggle overlays when not in minimal mode
-        if not minimalMode then
+        if not minimalModeEnabled then
             -- Simple toggle between controls and I/O overlays
             activeOverlay = (activeOverlay == "controls") and "io" or "controls"
 
@@ -2003,7 +2066,7 @@ end
 -- Modify keyreleased to support minimal mode
 function M.keyreleased(key)
     -- Let minimal mode handle if active
-    if minimalMode then MinimalMode.keyreleased(key) end
+    if minimalModeEnabled then MinimalMode.keyreleased(key) end
 
     -- Continue with normal key release handling...
 end
@@ -2638,5 +2701,70 @@ end
 
 -- Accessor for debug mode
 function M.isDebugMode() return debugMode end
+
+-- Public function to load a script from a path
+function M.loadScriptFromPath(filePath)
+    if not filePath then return end
+
+    print("Loading script from path:", filePath)
+
+    -- Update scriptPath and load the script
+    scriptPath = filePath
+
+    -- Update config
+    local cfg = config.load()
+    cfg.script = cfg.script or {}
+    cfg.script.path = scriptPath
+    config.save(cfg)
+
+    -- Load the new script
+    local newScript, newScriptParameters = loadScript(scriptPath)
+
+    if newScript then
+        -- Store previous I/O connections
+        local prevInputAssignments = scriptInputAssignments
+        local prevOutputAssignments = scriptOutputAssignments
+
+        -- Update the script
+        script = newScript
+        scriptParameters = newScriptParameters
+
+        -- Determine input/output counts from the updated script table
+        if type(script.inputs) == "number" then
+            scriptInputCount = script.inputs
+        elseif type(script.inputs) == "table" then
+            scriptInputCount = #script.inputs
+        else
+            scriptInputCount = 0
+        end
+
+        if type(script.outputs) == "number" then
+            scriptOutputCount = script.outputs
+        elseif type(script.outputs) == "table" then
+            scriptOutputCount = #script.outputs
+        else
+            scriptOutputCount = 0
+        end
+
+        -- Clear existing assignments
+        for i = 1, scriptInputCount do scriptInputAssignments[i] = nil end
+        for i = 1, scriptOutputCount do scriptOutputAssignments[i] = nil end
+
+        -- Create default mappings for the new script
+        createDefaultMappings()
+
+        -- Update minimal mode parameters
+        MinimalMode.setParameters(scriptParameters)
+
+        -- Show notification
+        showNotification("Script loaded: " .. filePath:match("([^/]+)%.lua$"))
+
+        return true
+    else
+        -- Show error notification
+        showErrorNotification("Failed to load script: " .. filePath)
+        return false
+    end
+end
 
 return M

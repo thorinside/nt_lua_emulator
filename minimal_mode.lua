@@ -120,8 +120,22 @@ end
 function MinimalMode.draw()
     if not isActive then return end
 
+    -- Check if display module is available
+    if not display then
+        love.graphics.setColor(1, 0.3, 0.3, 1)
+        love.graphics.print("ERROR: Display module not initialized", 10, 10)
+        return
+    end
+
     -- Get display config
     local config = display.getConfig()
+    if not config then
+        love.graphics.setColor(1, 0.3, 0.3, 1)
+        love.graphics
+            .print("ERROR: Display configuration not available", 10, 10)
+        return
+    end
+
     local displayW = config.width * config.scaling
     local displayH = config.height * config.scaling
 
