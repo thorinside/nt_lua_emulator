@@ -140,6 +140,7 @@ function parameter_knobs.getKnobPosition(i, params)
     local panelY = params.panelY
     local knobRadius = params.knobRadius
     local knobSpacing = params.knobSpacing
+    local uiScaleFactor = params.uiScaleFactor or 1.0 -- Default to 1.0 if not provided
 
     local knobsPerRow = 9 -- Match the draw function
     local totalKnobs = #scriptParameters
@@ -163,10 +164,19 @@ function parameter_knobs.getKnobPosition(i, params)
                                  knobsPerRow) or knobsPerRow) or knobsPerRow
 
     local totalWidth = (knobsThisRow - 1) * knobSpacing
-    local startX = (love.graphics.getWidth() - totalWidth) / 2
+    -- Make sure to correctly use the actual window width, not a scaled value
+    local startX = (love.graphics.getWidth() / uiScaleFactor - totalWidth) / 2
 
     local knobX = startX + col * knobSpacing
     local knobY = panelY + row * rowSpacing + knobRadius
+
+    -- Debug output to help troubleshoot
+    if i <= 3 then -- Only print for first few knobs to avoid spam
+        print(string.format(
+                  "Knob %d position: (%.1f, %.1f), window width: %d, scale: %.1f",
+                  i, knobX, knobY, love.graphics.getWidth(), uiScaleFactor))
+    end
+
     return knobX, knobY
 end
 

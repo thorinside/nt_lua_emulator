@@ -413,6 +413,11 @@ function M.mousemoved(x, y, dx, dy)
         ly = y / M.uiScaleFactor
     end
 
+    -- Debug output
+    print(string.format(
+              "Mouse moved: raw (%.1f, %.1f), scaled (%.1f, %.1f), scale factor: %.1f",
+              x, y, lx, ly, M.uiScaleFactor))
+
     -- First check if controls handled the event
     if M.controls.mousemoved(lx, ly, dx, dy) then return true end
 
@@ -535,7 +540,8 @@ function M.mousemoved(x, y, dx, dy)
             displayWidth = M.display.getConfig().width,
             panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
             knobRadius = M.paramKnobRadius,
-            knobSpacing = M.paramKnobSpacing
+            knobSpacing = M.paramKnobSpacing,
+            uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
         }
 
         -- Reset active knob
@@ -637,7 +643,8 @@ function M.mousereleased(x, y, button)
                     displayWidth = M.display.getConfig().width,
                     panelY = M.lastPhysicalIOBottomY + 24,
                     knobRadius = M.paramKnobRadius,
-                    knobSpacing = M.paramKnobSpacing
+                    knobSpacing = M.paramKnobSpacing,
+                    uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
                 }
 
                 for i, sp in ipairs(M.scriptParameters) do
@@ -718,6 +725,11 @@ function M.wheelmoved(x, y)
         ly = ly / M.uiScaleFactor
     end
 
+    -- Debug output
+    print(string.format(
+              "  Mouse coordinates: raw (%.1f, %.1f), scaled (%.1f, %.1f), scale factor: %.1f",
+              love.mouse.getX(), love.mouse.getY(), lx, ly, M.uiScaleFactor))
+
     -- First check if controls handled the event
     if M.controls.wheelmoved(x, y) then
         print("  Controls handled the wheel event")
@@ -732,7 +744,8 @@ function M.wheelmoved(x, y)
             displayWidth = M.display.getConfig().width,
             panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
             knobRadius = M.paramKnobRadius,
-            knobSpacing = M.paramKnobSpacing
+            knobSpacing = M.paramKnobSpacing,
+            uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
         }
 
         -- Check if mouse is over any knob
