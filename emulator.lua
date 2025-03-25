@@ -37,7 +37,8 @@ local paramKnobSpacing = 80
 
 -- Script reloading configuration
 local enableAutoReload = true
-local scriptPath = config.load().script.path
+-- Use a default script path that will be overridden by state.json if available
+local scriptPath = "test_script.lua" -- Default path
 local scriptLastModified = 0
 local lastReloadTime = 0
 local reloadBlink = false
@@ -824,9 +825,17 @@ function M.load()
         minimalModeInitialized = true
     end
 
-    -- Set initial state from config
-    local cfg = config.load()
-    minimalModeEnabled = cfg and cfg.minimalMode or false
+    -- Set initial minimal mode state from state.json if available
+    minimalModeEnabled = false -- Default value
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success and result.minimalMode ~= nil then
+            minimalModeEnabled = result.minimalMode
+        end
+    end
 
     -- Calculate correct window size based on minimal mode
     windowHeight = calculateWindowHeight(activeOverlay)
@@ -1665,10 +1674,21 @@ function M.keypressed(key)
             love.window.setPosition(x, y)
         end
 
-        -- Save minimalModeEnabled to config
-        local cfg = config.load()
-        cfg.minimalMode = minimalModeEnabled
-        config.save(cfg)
+        -- Save minimalModeEnabled to state.json instead of config
+        local state = {}
+        local stateFile = io.open("state.json", "r")
+        if stateFile then
+            local content = stateFile:read("*a")
+            stateFile:close()
+            local success, result = pcall(json.decode, content)
+            if success then state = result end
+        end
+        state.minimalMode = minimalModeEnabled
+        local stateFile = io.open("state.json", "w")
+        if stateFile then
+            stateFile:write(json.encode(state, {indent = true}))
+            stateFile:close()
+        end
 
         return
     end
@@ -2564,11 +2584,21 @@ function M.loadScriptFromPath(filePath)
     -- Update scriptPath and load the script
     scriptPath = filePath
 
-    -- Update config
-    local cfg = config.load()
-    cfg.script = cfg.script or {}
-    cfg.script.path = scriptPath
-    config.save(cfg)
+    -- Update state.json with the script path (don't update config.json)
+    local state = {}
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success then state = result end
+    end
+    state.scriptPath = scriptPath
+    local stateFile = io.open("state.json", "w")
+    if stateFile then
+        stateFile:write(json.encode(state, {indent = true}))
+        stateFile:close()
+    end
 
     -- Load the new script
     local newScript, newScriptParameters = loadScript(scriptPath)
