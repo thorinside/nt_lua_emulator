@@ -14,6 +14,7 @@ local config = require("config")
 local MinimalMode = require("minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
 local debug_utils = require("debug_utils")
+local script_host = require("emulator_script_host") -- Add script host module
 
 --------------------------------------------------------------------------------
 -- Configuration
@@ -705,6 +706,9 @@ local minimalModeInitialized = false
 
 -- At the end of the function M.load(), add:
 function M.load()
+    -- Setup script_host to use our notification functions
+    script_host.setNotificationCallbacks(showNotification, showErrorNotification)
+
     -- Calculate window size to fit the display and UI
     local windowWidth = scaledDisplayWidth -- Make window exactly as wide as the scaled display
     local windowHeight = calculateWindowHeight(activeOverlay) -- Use the shared calculation function
@@ -2648,6 +2652,117 @@ function M.loadScriptFromPath(filePath)
         showErrorNotification("Failed to load script: " .. filePath)
         return false
     end
+end
+
+-- Helper function to set up control callbacks
+local function setupControlCallbacks()
+    -- Only proceed if we have a valid script
+    if not script then return end
+
+    -- Define control callbacks
+    local controlCallbacks = {
+        onButtonPress = function(buttonIndex)
+            if script then
+                local functionName = "button" .. buttonIndex .. "Push"
+                if script[functionName] then
+                    print("Button " .. buttonIndex ..
+                              " pressed, calling script." .. functionName)
+                    safeScriptCall(script[functionName], script)
+                elseif script.button then
+                    print("Button " .. buttonIndex ..
+                              " pressed, calling script.button")
+                    safeScriptCall(script.button, script, buttonIndex, true)
+                end
+            end
+        end,
+        onButtonRelease = function(buttonIndex)
+            if script then
+                local functionName = "button" .. buttonIndex .. "Release"
+                if script[functionName] then
+                    print("Button " .. buttonIndex ..
+                              " released, calling script." .. functionName)
+                    safeScriptCall(script[functionName], script)
+                elseif script.button then
+                    print("Button " .. buttonIndex ..
+                              " released, calling script.button")
+                    safeScriptCall(script.button, script, buttonIndex, false)
+                end
+            end
+        end,
+        onPotChange = function(potIndex, value)
+            if script then
+                local functionName = "pot" .. potIndex .. "Turn"
+                if script[functionName] then
+                    print("Pot " .. potIndex .. " changed to " .. value ..
+                              ", calling script." .. functionName)
+                    safeScriptCall(script[functionName], script, value)
+                elseif script.pot then
+                    print("Pot " .. potIndex .. " changed to " .. value ..
+                              ", calling script.pot")
+                    safeScriptCall(script.pot, script, potIndex, value)
+                end
+            end
+        end,
+        onPotPress = function(potIndex)
+            if script then
+                local functionName = "pot" .. potIndex .. "Push"
+                if script[functionName] then
+                    print("Pot " .. potIndex .. " pressed, calling script." ..
+                              functionName)
+                    safeScriptCall(script[functionName], script)
+                end
+            end
+        end,
+        onPotRelease = function(potIndex)
+            if script then
+                local functionName = "pot" .. potIndex .. "Release"
+                if script[functionName] then
+                    print("Pot " .. potIndex .. " released, calling script." ..
+                              functionName)
+                    safeScriptCall(script[functionName], script)
+                end
+            end
+        end,
+        onEncoderChange = function(encoderIndex, delta)
+            if script then
+                local functionName = "encoder" .. encoderIndex .. "Turn"
+                if script[functionName] then
+                    print(
+                        "Encoder " .. encoderIndex .. " changed by " .. delta ..
+                            ", calling script." .. functionName)
+                    safeScriptCall(script[functionName], script, delta)
+                elseif script.encoder then
+                    print(
+                        "Encoder " .. encoderIndex .. " changed by " .. delta ..
+                            ", calling script.encoder")
+                    safeScriptCall(script.encoder, script, encoderIndex, delta)
+                end
+            end
+        end,
+        onEncoderPress = function(encoderIndex)
+            if script then
+                local functionName = "encoder" .. encoderIndex .. "Push"
+                if script[functionName] then
+                    print("Encoder " .. encoderIndex ..
+                              " pressed, calling script." .. functionName)
+                    safeScriptCall(script[functionName], script)
+                end
+            end
+        end,
+        onEncoderRelease = function(encoderIndex)
+            if script then
+                local functionName = "encoder" .. encoderIndex .. "Release"
+                if script[functionName] then
+                    print("Encoder " .. encoderIndex ..
+                              " released, calling script." .. functionName)
+                    safeScriptCall(script[functionName], script)
+                end
+            end
+        end
+    }
+
+    -- Set the control callbacks
+    controls.setCallbacks(controlCallbacks)
 end
 
 return M
