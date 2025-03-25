@@ -8,7 +8,7 @@
     "enabled":false
   },
   "script":{
-    "path":"/Users/nealsanche/Downloads/to_neal/particles_beta_0.lua"
+    "path":"./test_script.lua"
   },
   "minimalMode":false
 }

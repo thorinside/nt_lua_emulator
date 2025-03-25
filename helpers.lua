@@ -35,7 +35,6 @@ function helpers.parseScriptParameters(paramsTable)
             entry.max = p[3] or 127
             entry.default = p[4] or entry.min
             entry.unit = p[5] or "kNone"
-            entry.values = nil -- Explicitly set to nil for non-enum parameters
 
             if p[6] then
                 -- Float parameter with scale: { name, min, max, default, unit, scale }
@@ -62,9 +61,10 @@ function helpers.parseScriptParameters(paramsTable)
         -- Log parameter parsing for debugging
         debug_utils.debugLog(string.format(
                                  "Parsed parameter %d: %s (type=%s, min=%.3f, max=%.3f, default=%.3f, unit=%s, scale=%s)",
-                                 i, entry.name, entry.type, entry.min,
-                                 entry.max, entry.default, entry.unit,
-                                 tostring(entry.scale)))
+                                 i, entry.name, entry.type, entry.min or 0,
+                                 entry.max or 127, entry.default or 0,
+                                 entry.unit or "kNone",
+                                 tostring(entry.scale or 1)))
 
         scriptParameters[i] = entry
     end
