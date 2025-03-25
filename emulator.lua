@@ -384,6 +384,10 @@ function M.load()
             windowManager.getScaledDisplayDimensions()
         love.window.setMode(scaledDisplayWidth, scaledDisplayHeight,
                             {resizable = false, msaa = 8, vsync = 1})
+
+        -- Activate minimal mode UI
+        MinimalMode.activate()
+
         print("Started in minimal mode with display dimensions")
     else
         -- Now resize the window with complete information
@@ -397,6 +401,9 @@ function M.update(dt)
 
     -- Update notifications system
     notifications.update(dt)
+
+    -- Update minimal mode state if active
+    if windowManager.isMinimalMode() then MinimalMode.update(dt) end
 
     -- Update time counter and trigger pulse states
     time = signalProcessor.updateTime(dt)
@@ -754,12 +761,14 @@ function M.keypressed(key)
     if key == "f1" then
         local isMinimal = windowManager.isMinimalMode()
 
+        -- First toggle the UI state in the MinimalMode module
         if isMinimal then
             MinimalMode.deactivate()
         else
             MinimalMode.activate()
         end
 
+        -- Then update the window manager state
         windowManager.setMinimalMode(not isMinimal)
         saveIOState()
         return
