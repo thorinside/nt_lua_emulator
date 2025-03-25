@@ -1,6 +1,21 @@
 -- emulator.lua
 local M = {} -- We'll return this table.
 
+-- Import refactored modules
+local scriptLoader = require("modules.script_loader")
+local ioState = require("modules.io_state")
+local notifications = require("modules.notifications")
+
+-- Initialize the script loader with notification functions
+scriptLoader.init({
+    showNotification = function(message)
+        notifications.showNotification(message)
+    end,
+    showErrorNotification = function(message)
+        notifications.showErrorNotification(message)
+    end
+})
+
 -- Required modules
 require("constants") -- These are global variables
 -- Constants are now global: kGate, kTrigger, kCV, kBipolar, kUnipolar
@@ -61,9 +76,6 @@ local scriptInputCount = 0
 local scriptOutputCount = 0
 local scriptInputAssignments = {}
 local scriptOutputAssignments = {}
--- We no longer need to maintain these global position arrays; they will be handled in io_panel.lua
--- local scriptInputPositions = {}
--- local scriptOutputPositions = {}
 
 local inputClock = {}
 for i = 1, 12 do inputClock[i] = false end
@@ -138,47 +150,20 @@ local debugMode = false
 
 -- IO State management
 local stateFile = "state.json"
-local mappingsChanged = false
 
--- Add notification system at top with other state variables
-local errorNotification = {
-    active = false,
-    message = "",
-    time = 0,
-    duration = 5, -- Show error for 5 seconds
-    alpha = 0,
-    targetAlpha = 0
-}
+-- Add minimal mode state at top with other state variables
+local minimalModeEnabled = false
+local minimalModeInitialized = false
 
--- State for temporary notifications
-local notification = {
-    active = false,
-    message = "",
-    time = 0,
-    duration = 2, -- seconds to show notification
-    targetAlpha = 0.0,
-    alpha = 0.0
-}
+-- Function to show notifications (delegate to notifications module)
+local function showNotification(message) notifications.showNotification(message) end
 
--- Function to show notifications
-local function showNotification(message)
-    notification.active = true
-    notification.message = message
-    notification.time = 0
-    notification.targetAlpha = 1.0
-    print("Info: " .. message)
-end
-
--- Function to show error notifications
+-- Function to show error notifications (delegate to notifications module)
 local function showErrorNotification(message)
-    errorNotification.active = true
-    errorNotification.message = message
-    errorNotification.time = 0
-    errorNotification.targetAlpha = 1.0
-    print("Error: " .. message)
+    notifications.showErrorNotification(message)
 end
 
--- Function to safely call script functions with pcall
+-- Function to safely call script functions with pcall (delegate to scriptLoader)
 local function safeScriptCall(func, scriptObj, ...)
     if not func then return nil end
 
@@ -190,30 +175,28 @@ local function safeScriptCall(func, scriptObj, ...)
     return result
 end
 
--- Save current IO mappings to state.json
+-- Create default mappings (first n inputs, first m outputs) (delegate to ioState)
+local function createDefaultMappings()
+    scriptInputAssignments, scriptOutputAssignments =
+        ioState.createDefaultMappings(scriptInputCount, scriptOutputCount,
+                                      scriptInputAssignments,
+                                      scriptOutputAssignments)
+end
+
+-- Mark that mappings have changed (delegate to ioState)
+local function markMappingsChanged() ioState.markMappingsChanged() end
+
+-- Save current IO mappings to state.json (delegate to ioState)
 local function saveIOState()
-    -- Only save if mappings have changed
-    if not mappingsChanged then return end
-
-    -- Get current window position and size (with safe checks)
-    local wx, wy, ww, wh = 0, 0, 768, 600
-    if love and love.window then
-        if love.window.getPosition then
-            wx, wy = love.window.getPosition()
-        end
-        if love.window.getWidth and love.window.getHeight then
-            ww, wh = love.window.getWidth(), love.window.getHeight()
-        end
-    end
-
+    -- Prepare state object
     local state = {
         scriptPath = scriptPath,
         inputs = {},
         outputs = {},
         inputModes = {}, -- Add storage for input modes
         oscEnabled = osc_client.isEnabled(), -- Save OSC enabled state
-        window = {x = wx, y = wy, width = ww, height = wh},
-        clockBPM = clockBPM -- Save global clock BPM setting
+        clockBPM = clockBPM, -- Save global clock BPM setting
+        minimalMode = minimalModeEnabled -- Save minimal mode state
     }
 
     -- Convert input assignments to JSON-compatible format
@@ -239,46 +222,13 @@ local function saveIOState()
         }
     end
 
-    -- Convert to JSON
-    local jsonData = json.encode(state, {indent = true})
-
-    -- Save to file
-    local file = io.open(stateFile, "w")
-    if file then
-        file:write(jsonData)
-        file:close()
-        print("IO mappings saved to " .. stateFile)
-        mappingsChanged = false
-    else
-        print("Error: Could not save IO mappings to " .. stateFile)
-    end
+    ioState.saveIOState(state)
 end
 
--- Load IO mappings from state.json
+-- Load IO mappings from state.json (delegate to ioState)
 local function loadIOState()
-    -- Check if state file exists
-    local file = io.open(stateFile, "r")
-    if not file then
-        print("No saved state found at " .. stateFile)
-        return false
-    end
-
-    -- Read the file
-    local content = file:read("*all")
-    file:close()
-
-    -- Parse JSON
-    local state = json.decode(content)
-    if not state then
-        print("Error parsing state file")
-        return false
-    end
-
-    -- Check if state is for the current script
-    if state.scriptPath ~= scriptPath then
-        print("State is for a different script, not loading")
-        return false
-    end
+    local success, state = ioState.loadIOState(scriptPath)
+    if not success then return false end
 
     -- Apply input mappings
     if state.inputs then
@@ -353,37 +303,35 @@ local function loadIOState()
         end
     end
 
+    -- Restore minimal mode state if present
+    if state.minimalMode ~= nil then minimalModeEnabled = state.minimalMode end
+
     print("IO mappings loaded from " .. stateFile)
     return true
 end
 
--- Create default mappings (first n inputs, first m outputs)
-local function createDefaultMappings()
-    -- Map first n physical inputs to script inputs
-    for i = 1, scriptInputCount do
-        if i <= 12 then -- There are 12 physical inputs
-            scriptInputAssignments[i] = i
-        end
-    end
+-- Load a script and initialize it (delegate to scriptLoader)
+local function loadScript(scriptPathToLoad)
+    -- Extend the script loader initialization with current script path
+    scriptLoader.init({
+        showNotification = showNotification,
+        showErrorNotification = showErrorNotification,
+        scriptPath = scriptPathToLoad
+    })
 
-    -- Map first m physical outputs to script outputs
-    for i = 1, scriptOutputCount do
-        if i <= 8 then -- There are 8 physical outputs
-            scriptOutputAssignments[i] = i
-        end
-    end
-
-    -- Mark as changed so it will be saved
-    mappingsChanged = true
-    print("Created default I/O mappings")
+    return scriptLoader.loadScript(scriptPathToLoad, createDefaultMappings)
 end
 
--- Mark that mappings have changed
-local function markMappingsChanged() mappingsChanged = true end
+-- Check if script has been modified (delegate to scriptLoader)
+local function checkScriptModified(path)
+    local modified = scriptLoader.checkScriptModified(path)
+    if modified then
+        -- Invalidate window height cache when script is modified
+        cachedIOHeight = nil
+    end
+    return modified
+end
 
---------------------------------------------------------------------------------
--- The Emulator Module Functions
---------------------------------------------------------------------------------
 -- Check if script has control callbacks and switch to controls tab if needed
 local function hasControlCallbacks(script)
     return script.button ~= nil or script.pot1Turn ~= nil or script.pot2Turn ~=
@@ -399,6 +347,9 @@ local function hasControlCallbacks(script)
                script.button2Release ~= nil or script.button3Release ~= nil or
                script.button4Release ~= nil
 end
+
+-- Initialize minimal mode
+local MinimalMode = require("minimal_mode")
 
 -- Helper function to calculate window height based on content and overlay type
 local function calculateWindowHeight(overlay)
@@ -447,262 +398,9 @@ local function calculateWindowHeight(overlay)
     end
 end
 
--- Load a script and initialize it
-local function loadScript(scriptPath)
-    -- Handle both absolute and relative paths
-    local filePath = scriptPath
-    local newScript
-
-    -- Create the drawing environment FIRST - before any script code runs
-    local drawingEnv = display.createDrawingEnvironment()
-
-    -- Add drawing functions to the global environment before loading script
-    for funcName, func in pairs(drawingEnv) do
-        -- Make drawing functions available globally
-        _G[funcName] = func
-    end
-
-    -- Add custom drawing functions not provided by the display module
-
-    -- Standard behavior for pot3 turning
-    _G.standardPot3Turn = function(x)
-        -- Standard behavior for the third potentiometer
-        -- In the real device, this might scroll through parameters
-        print("Pot 3 turned: " .. x)
-    end
-
-    -- Add exit function for compatibility
-    _G.exit = function() love.event.quit() end
-
-    -- Add compatibility functions for test scripts
-    _G.getCurrentAlgorithm = function() return 0 end
-    _G.getCurrentParameter = function() return 0 end
-
-    -- Add debug function for scripts
-    _G.debug = function(str) print(tostring(str)) end
-
-    -- Screen coordinate conversion functions
-    _G.toScreenX = function(x) return 1.0 + 2.5 * (x + 10.0) end
-
-    _G.toScreenY = function(y)
-        -- No need for special scaling here - the parameter system will handle
-        -- the kBy10 scaling when setting/getting parameters
-        return 12.0 + 2.5 * (10.0 - y)
-    end
-
-    -- Make parameterOffset available both as a function and a property
-    _G.parameterOffset = 0
-
-    -- Focus on a parameter (for pot/encoder interactions)
-    _G.focusParameter = function(algorithm, parameter)
-        -- In a real device, this would focus UI on a specific parameter
-        -- For the emulator, we'll just log it
-        debug_utils.debugLog("Focusing on parameter " .. parameter ..
-                                 " of algorithm " .. algorithm)
-        -- We could potentially store the current focused parameter for display
-        -- but for now this is just a stub
-    end
-
-    -- Set a parameter value
-    _G.setParameter = function(algorithm, parameter, value)
-        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
-        -- Adjust the parameter index based on parameterOffset
-        local paramIndex = parameter - newScript.parameterOffset
-        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
-            local sp = newScriptParameters[paramIndex]
-            if sp then
-                -- Ensure the value is within bounds
-                if sp.type == "integer" then
-                    value = math.floor(value)
-                end
-                value = math.max(sp.min, math.min(sp.max, value))
-                sp.current = value
-            end
-        end
-    end
-
-    if scriptPath:sub(1, 1) == "/" then
-        -- For absolute paths, read the file directly
-        local file = io.open(scriptPath, "r")
-        if not file then
-            print("Error: Could not open script file:", scriptPath)
-            return nil
-        end
-
-        local content = file:read("*a")
-        file:close()
-
-        -- Create a temporary chunk name for the script
-        local chunkName = "@" .. scriptPath:match("([^/]+)%.lua$")
-
-        -- Load the script content
-        local chunk, err = load(content, chunkName)
-        if not chunk then
-            print("Error loading script:", err)
-            return nil
-        end
-
-        -- Execute the chunk to get the script table
-        local status, result = pcall(chunk)
-        if not status then
-            print("Error executing script:", result)
-            return nil
-        end
-
-        if not result then
-            print("Error: Script returned nil:", scriptPath)
-            return nil
-        end
-
-        newScript = result
-        print("Successfully loaded script from:", scriptPath)
-    else
-        -- For relative paths, use require as before
-        local requirePath = scriptPath:gsub("%.lua$", "")
-        package.loaded[requirePath] = nil
-
-        local status, result = pcall(require, requirePath)
-        if not status then
-            print("Error loading script:", result)
-            return nil
-        end
-
-        if not result then
-            print("Error: Script returned nil:", scriptPath)
-            return nil
-        end
-
-        newScript = result
-    end
-
-    local newScriptParameters = {}
-
-    -- Provide drawing environment to script
-    -- This section has been moved to the beginning of the function
-    -- No longer need to set up the drawing environment here
-
-    if newScript.init then
-        local initResult = safeScriptCall(newScript.init, newScript)
-        if type(initResult) == "table" then
-            -- Merge the I/O definitions and names returned from init into the script table
-            newScript.inputs = initResult.inputs or newScript.inputs
-            newScript.outputs = initResult.outputs or newScript.outputs
-            newScript.inputNames = initResult.inputNames or newScript.inputNames
-            newScript.outputNames = initResult.outputNames or
-                                        newScript.outputNames
-
-            if initResult.parameters then
-                newScriptParameters = helpers.parseScriptParameters(
-                                          initResult.parameters)
-                helpers.updateScriptParameters(newScriptParameters, newScript)
-            end
-        end
-    end
-
-    -- Add required fields to the script object
-    newScript.parameterOffset = 1 -- Add parameterOffset field with value 1
-
-    -- Pass script to OSC client for output names
-    if osc_client then osc_client.setScript(newScript) end
-
-    -- Set up control callbacks
-    if newScript.button then
-        -- If the script has a button function, use it for all buttons
-        for i = 1, 4 do
-            newScript["button" .. i .. "Push"] = function()
-                safeScriptCall(newScript.button, newScript, i, true)
-            end
-            newScript["button" .. i .. "Release"] = function()
-                safeScriptCall(newScript.button, newScript, i, false)
-            end
-        end
-    end
-
-    -- Save the script path to state.json
-    local state = {}
-    local stateFile = io.open("state.json", "r")
-    if stateFile then
-        local content = stateFile:read("*a")
-        stateFile:close()
-        local success, result = pcall(json.decode, content)
-        if success then state = result end
-    end
-    state.scriptPath = scriptPath
-    local stateFile = io.open("state.json", "w")
-    if stateFile then
-        stateFile:write(json.encode(state, {indent = true}))
-        stateFile:close()
-    end
-
-    return newScript, newScriptParameters
-end
-
--- Check if a file has been modified
-local function checkScriptModified(path)
-    local info
-
-    if path:sub(1, 1) == "/" then
-        -- For absolute paths, use lfs (LuaFileSystem) or fallback to os.stat
-        local success, lfs = pcall(require, "lfs")
-        if success then
-            info = lfs.attributes(path)
-            if info and info.modification then
-                local lastModified = info.modification
-                if lastModified > scriptLastModified then
-                    scriptLastModified = lastModified
-                    -- Invalidate window height cache when script is modified
-                    cachedIOHeight = nil
-                    return true
-                end
-                return false
-            end
-        else
-            -- Fallback method using io with rate limiting
-            local currentTime = love.timer.getTime()
-            if currentTime - lastAbsolutePathCheckTime <
-                absolutePathCheckInterval then
-                -- Not enough time has passed since last check
-                return false
-            end
-
-            -- Update last check time
-            lastAbsolutePathCheckTime = currentTime
-
-            -- Without LuaFileSystem, we can't reliably detect changes to absolute path files
-            -- Instead, we'll only check once on startup (first time) and then require manual reload
-            if scriptLastModified == 0 then
-                -- First time checking this file - mark it as seen and don't reload
-                scriptLastModified = 1 -- Use any non-zero value
-                return false
-            end
-
-            -- For subsequent checks, never auto-reload
-            return false
-        end
-    else
-        -- For relative paths, use LÖVE's filesystem
-        info = love.filesystem.getInfo(path)
-        if not info then return false end
-
-        local lastModified = info.modtime
-        if lastModified > scriptLastModified then
-            scriptLastModified = lastModified
-            -- Invalidate window height cache when script is modified
-            cachedIOHeight = nil
-            return true
-        end
-
-        return false
-    end
-end
-
--- Add a variable to track minimal mode state
-local minimalModeEnabled = false
-
--- Initialize minimal mode
-local MinimalMode = require("minimal_mode")
-local minimalModeInitialized = false
-
+--------------------------------------------------------------------------------
+-- The Emulator Module Functions
+--------------------------------------------------------------------------------
 -- At the end of the function M.load(), add:
 function M.load()
     -- Calculate window size to fit the display and UI
@@ -853,6 +551,9 @@ function M.update(dt)
             fadeAlpha = fadeTarget
         end
     end
+
+    -- Update notifications
+    notifications.update(dt)
 
     -- Update controls active state based on current overlay and minimal mode
     controls.setActive(activeOverlay == "controls" and not minimalModeEnabled)
@@ -1559,83 +1260,8 @@ function M.draw()
         love.graphics.circle("line", love.graphics.getWidth() - 6,
                              love.graphics.getHeight() - 6, 3)
 
-        -- Draw error notification if active
-        if errorNotification.active then
-            -- Update notification alpha for fade in/out
-            errorNotification.alpha = errorNotification.alpha +
-                                          (errorNotification.targetAlpha -
-                                              errorNotification.alpha) * 0.01 *
-                                          5
-
-            -- Background rectangle
-            love.graphics.setColor(0.1, 0.1, 0.1, errorNotification.alpha * 0.9)
-            local notifWidth = 400
-            local notifHeight = 80
-            local notifX = (love.graphics.getWidth() - notifWidth) / 2
-            local notifY = 100
-            love.graphics.rectangle("fill", notifX, notifY, notifWidth,
-                                    notifHeight, 8, 8)
-
-            -- Border
-            love.graphics.setColor(0.9, 0.2, 0.2, errorNotification.alpha * 0.9)
-            love.graphics.rectangle("line", notifX, notifY, notifWidth,
-                                    notifHeight, 8, 8)
-
-            -- Text
-            love.graphics.setColor(1, 1, 1, errorNotification.alpha)
-            love.graphics.setFont(fontDefault)
-            love.graphics.printf("Error", notifX + 10, notifY + 10,
-                                 notifWidth - 20, "center")
-            love.graphics.setFont(fontSmall)
-            love.graphics.printf(errorNotification.message, notifX + 10,
-                                 notifY + 35, notifWidth - 20, "center")
-
-            -- Update notification time
-            errorNotification.time = errorNotification.time + 0.01
-            if errorNotification.time > errorNotification.duration then
-                errorNotification.targetAlpha = 0
-                if errorNotification.alpha < 0.01 then
-                    errorNotification.active = false
-                end
-            end
-        end
-
-        -- Draw regular notification if active
-        if notification.active then
-            -- Update notification alpha for fade in/out
-            notification.alpha = notification.alpha +
-                                     (notification.targetAlpha -
-                                         notification.alpha) * 0.01 * 5
-
-            -- Background rectangle
-            love.graphics.setColor(0.1, 0.1, 0.1, notification.alpha * 0.9)
-            local notifWidth = 400
-            local notifHeight = 60
-            local notifX = (love.graphics.getWidth() - notifWidth) / 2
-            local notifY = 100
-            love.graphics.rectangle("fill", notifX, notifY, notifWidth,
-                                    notifHeight, 8, 8)
-
-            -- Border
-            love.graphics.setColor(0.3, 0.7, 0.9, notification.alpha * 0.9)
-            love.graphics.rectangle("line", notifX, notifY, notifWidth,
-                                    notifHeight, 8, 8)
-
-            -- Text
-            love.graphics.setColor(1, 1, 1, notification.alpha)
-            love.graphics.setFont(fontDefault)
-            love.graphics.printf(notification.message, notifX + 10, notifY + 20,
-                                 notifWidth - 20, "center")
-
-            -- Update notification time
-            notification.time = notification.time + 0.01
-            if notification.time > notification.duration then
-                notification.targetAlpha = 0
-                if notification.alpha < 0.01 then
-                    notification.active = false
-                end
-            end
-        end
+        -- Draw notifications
+        notifications.draw(fontDefault, fontSmall)
     end
 end
 
