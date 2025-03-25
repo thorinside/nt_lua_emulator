@@ -100,7 +100,7 @@ end
 local function markMappingsChanged() ioState.markMappingsChanged() end
 
 -- Save current IO mappings to state.json (delegate to ioState)
-local function saveIOState()
+local function saveIOState(forceSave)
     -- Prepare state object
     local state = {
         scriptPath = scriptPath,
@@ -109,7 +109,8 @@ local function saveIOState()
         inputModes = {}, -- Add storage for input modes
         oscEnabled = osc_client.isEnabled(), -- Save OSC enabled state
         clockBPM = signalProcessor.getClockBPM(), -- Save global clock BPM setting
-        minimalMode = windowManager.isMinimalMode() -- Save minimal mode state
+        minimalMode = windowManager.isMinimalMode(), -- Save minimal mode state
+        activeOverlay = windowManager.getActiveOverlay() -- Save active overlay state
     }
 
     -- Convert input assignments to JSON-compatible format
@@ -140,7 +141,7 @@ local function saveIOState()
         }
     end
 
-    ioState.saveIOState(state)
+    ioState.saveIOState(state, forceSave)
 end
 
 -- Load IO mappings from state.json (delegate to ioState)
@@ -279,9 +280,8 @@ function M.load()
         baseColor = {0, 1, 1} -- Teal base color for display
     })
 
-    -- Set window mode
+    -- Set window title
     love.window.setTitle("Disting NT LUA Emulator")
-    local width, height = windowManager.resizeWindow()
 
     -- Set global line style for smoother lines
     love.graphics.setLineStyle("smooth")
@@ -367,10 +367,27 @@ function M.load()
         end)
     end
 
-    -- Set active overlay based on script callbacks
-    if scriptManager.hasControlCallbacks(script) then
-        windowManager.toggleOverlay()
-        windowManager.resizeWindow()
+    -- Update window manager state with script information
+    windowManager.setState({
+        script = script,
+        scriptInputCount = scriptInputCount,
+        scriptOutputCount = scriptOutputCount,
+        scriptParameters = parameterManager.getParameters(),
+        fontSmall = fontSmall
+    })
+
+    -- If we're in minimal mode, make sure the window size is exactly right
+    -- This ensures we don't get a visual jump from default size to minimal size
+    if windowManager.isMinimalMode() then
+        -- Force resize right away with exact display dimensions
+        local scaledDisplayWidth, scaledDisplayHeight =
+            windowManager.getScaledDisplayDimensions()
+        love.window.setMode(scaledDisplayWidth, scaledDisplayHeight,
+                            {resizable = false, msaa = 8, vsync = 1})
+        print("Started in minimal mode with display dimensions")
+    else
+        -- Now resize the window with complete information
+        local width, height = windowManager.resizeWindow()
     end
 end
 
@@ -394,6 +411,9 @@ function M.update(dt)
 
     -- Check for script file modification and reload if needed
     if scriptManager.checkScriptModified(time) then
+        -- Save window position before making any changes
+        local windowX, windowY = love.window.getPosition()
+
         -- Save current IO mappings before reload
         saveIOState()
 
@@ -436,6 +456,12 @@ function M.update(dt)
 
             -- Reset outputs that are no longer connected
             signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
+
+            -- Resize window to fit content (but don't change the overlay mode)
+            windowManager.resizeWindow()
+
+            -- Always restore window position after resize
+            love.window.setPosition(windowX, windowY)
 
             print("Script reloaded successfully!")
         end
@@ -759,6 +785,9 @@ function M.keypressed(key)
         -- Ctrl+R: Force script reload
         print("Manual reload triggered...")
 
+        -- Save window position before making any changes
+        local windowX, windowY = love.window.getPosition()
+
         -- Save current I/O mappings before reload
         saveIOState()
 
@@ -769,6 +798,10 @@ function M.keypressed(key)
                                        scriptOutputAssignments)
 
         if success then
+            -- Store previous I/O connections
+            local prevInputAssignments = scriptInputAssignments
+            local prevOutputAssignments = scriptOutputAssignments
+
             -- Update script and parameters
             script = newScript
             scriptParameters = newScriptParameters
@@ -780,11 +813,26 @@ function M.keypressed(key)
             scriptInputCount, scriptOutputCount =
                 scriptManager.getScriptIOCounts()
 
-            -- Set active overlay based on script callbacks
-            if scriptManager.hasControlCallbacks(script) then
-                windowManager.toggleOverlay()
-                windowManager.resizeWindow()
+            -- Restore previous I/O connections where possible
+            scriptInputAssignments = {}
+            scriptOutputAssignments = {}
+
+            for i = 1, scriptInputCount do
+                scriptInputAssignments[i] = prevInputAssignments[i]
             end
+
+            for i = 1, scriptOutputCount do
+                scriptOutputAssignments[i] = prevOutputAssignments[i]
+            end
+
+            -- Reset outputs that are no longer connected
+            signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
+
+            -- Resize window to fit content (but don't change the overlay mode)
+            windowManager.resizeWindow()
+
+            -- Always restore window position after resize
+            love.window.setPosition(windowX, windowY)
 
             print("Script manually reloaded successfully!")
         end
@@ -807,7 +855,7 @@ function M.keypressed(key)
     elseif key == "s" and love.keyboard.isDown("lctrl") then
         -- Ctrl+S: Save current I/O mappings
         markMappingsChanged() -- Mark as changed to force save
-        saveIOState()
+        saveIOState(true) -- Force save
         print("I/O mappings manually saved to " .. stateFile)
         return
     end
@@ -831,11 +879,14 @@ end
 function M.wheelmoved(x, y) return inputHandler.wheelmoved(x, y) end
 
 function M.quit()
-    -- Save IO mappings
-    saveIOState()
+    -- Force save IO mappings regardless of whether they've changed
+    markMappingsChanged() -- Mark as changed to force save
+    saveIOState(true) -- Pass true to force a save
 
     -- Clean up OSC client
     osc_client.cleanup()
+
+    print("Emulator state saved successfully before closing")
 end
 
 -- Accessor for debug mode
@@ -846,6 +897,9 @@ function M.loadScriptFromPath(filePath)
     if not filePath then return end
 
     print("Loading script from path:", filePath)
+
+    -- Save window position before making any changes
+    local windowX, windowY = love.window.getPosition()
 
     -- Update scriptPath and load the script
     scriptPath = filePath
@@ -894,6 +948,21 @@ function M.loadScriptFromPath(filePath)
 
         -- Update minimal mode parameters
         MinimalMode.setParameters(scriptParameters)
+
+        -- Update window manager with new info and resize
+        windowManager.setState({
+            script = script,
+            scriptInputCount = scriptInputCount,
+            scriptOutputCount = scriptOutputCount,
+            scriptParameters = scriptParameters,
+            fontSmall = fontSmall
+        })
+
+        -- Resize window for new script content
+        windowManager.resizeWindow()
+
+        -- Always restore window position after resize
+        love.window.setPosition(windowX, windowY)
 
         -- Show notification
         showNotification("Script loaded: " .. filePath:match("([^/]+)%.lua$"))

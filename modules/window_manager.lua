@@ -150,8 +150,9 @@ function M.invalidateCache() cachedIOHeight = nil end
 
 -- Resize the window based on current state
 function M.resizeWindow()
-    -- Save current window position
-    local x, y = love.window.getPosition()
+    -- Always remember current position before doing anything
+    local currentX, currentY = love.window.getPosition()
+    local currentWidth, currentHeight = love.graphics.getDimensions()
 
     -- Calculate window dimensions
     if minimalModeEnabled then
@@ -161,15 +162,30 @@ function M.resizeWindow()
     else
         -- Full mode shows either controls or IO panels
         windowWidth = scaledDisplayWidth
-        windowHeight = M.calculateWindowHeight()
+
+        -- Calculate height based on content
+        if M.scriptInputCount ~= nil and M.scriptOutputCount ~= nil then
+            windowHeight = M.calculateWindowHeight()
+        else
+            -- Reasonable default if we don't have script info yet
+            windowHeight = scaledDisplayHeight + 400
+        end
     end
 
-    -- Apply the new window size
-    love.window.setMode(windowWidth, windowHeight,
-                        {resizable = false, msaa = 8, vsync = 1})
+    -- Calculate percentage difference to avoid small resizes
+    local widthDiff = math.abs(currentWidth - windowWidth) / windowWidth
+    local heightDiff = math.abs(currentHeight - windowHeight) / windowHeight
 
-    -- Restore position
-    love.window.setPosition(x, y)
+    -- Only resize if dimensions changed by more than 5%
+    -- This prevents minor adjustments that could cause jumping
+    if widthDiff > 0.05 or heightDiff > 0.05 then
+        -- Set new mode while preserving position
+        love.window.setMode(windowWidth, windowHeight,
+                            {resizable = false, msaa = 8, vsync = 1})
+
+        -- Ensure position is restored exactly
+        love.window.setPosition(currentX, currentY)
+    end
 
     return windowWidth, windowHeight
 end

@@ -12,9 +12,9 @@ local stateFile = "state.json"
 local mappingsChanged = false
 
 -- Save current IO mappings to state.json
-function M.saveIOState(state)
-    -- Only save if mappings have changed
-    if not mappingsChanged then return end
+function M.saveIOState(state, forceWrite)
+    -- Only save if mappings have changed or if forcing a write
+    if not mappingsChanged and not forceWrite then return end
 
     -- Get current window position and size (with safe checks)
     local wx, wy, ww, wh = 0, 0, 768, 600
