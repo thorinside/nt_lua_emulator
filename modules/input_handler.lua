@@ -724,86 +724,100 @@ function M.wheelmoved(x, y)
         return true
     end
 
-    -- Handle parameter knob wheel control
-    if M.activeKnob and M.scriptParameters and M.activeKnob <=
-        #M.scriptParameters then
-        local param = M.scriptParameters[M.activeKnob]
-        local step = 1
+    -- Find the knob under the cursor directly in this function
+    -- rather than relying on mousemoved to set it
+    if M.scriptParameters then
+        local params = {
+            scriptParameters = M.scriptParameters,
+            displayWidth = M.display.getConfig().width,
+            panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
+            knobRadius = M.paramKnobRadius,
+            knobSpacing = M.paramKnobSpacing
+        }
 
-        print("  Active knob: " .. M.activeKnob .. " (" .. param.name .. ")")
-        print("  Current value: " .. param.current)
+        -- Check if mouse is over any knob
+        for i, sp in ipairs(M.scriptParameters) do
+            local knobX, knobY = M.parameter_knobs.getKnobPosition(i, params)
+            local dx = lx - knobX
+            local dy = ly - knobY
 
-        -- Adjust step size based on parameter type
-        if param.type == "float" then
-            if param.scale == kBy10 then
-                -- For kBy10, use step of 1.0 in display units
-                step = 1.0
-                print("  Using kBy10 step: " .. step)
-            elseif param.scale == kBy100 then
-                -- For kBy100, use step of 1.0 in display units
-                step = 1.0
-                print("  Using kBy100 step: " .. step)
-            elseif param.scale == kBy1000 then
-                -- For kBy1000, use step of 1.0 in display units
-                step = 1.0
-                print("  Using kBy1000 step: " .. step)
-            else
-                step = 0.1 -- Default for float without scaling
-                print("  Using default float step: " .. step)
+            -- Use slightly larger hit radius for wheel events to make it more forgiving
+            local hitRadiusSq = (M.paramKnobRadius * 1.5) *
+                                    (M.paramKnobRadius * 1.5)
+
+            if dx * dx + dy * dy <= hitRadiusSq then
+                print("  Found knob under cursor: " .. i .. " (" .. sp.name ..
+                          ")")
+
+                local step = 1
+
+                -- Adjust step size based on parameter type
+                if sp.type == "float" then
+                    if sp.scale == kBy10 then
+                        -- For kBy10, use step of 1.0 in display units
+                        step = 1.0
+                        print("  Using kBy10 step: " .. step)
+                    elseif sp.scale == kBy100 then
+                        -- For kBy100, use step of 1.0 in display units
+                        step = 1.0
+                        print("  Using kBy100 step: " .. step)
+                    elseif sp.scale == kBy1000 then
+                        -- For kBy1000, use step of 1.0 in display units
+                        step = 1.0
+                        print("  Using kBy1000 step: " .. step)
+                    else
+                        step = 0.1 -- Default for float without scaling
+                        print("  Using default float step: " .. step)
+                    end
+                else
+                    print("  Using default step: " .. step)
+                end
+
+                -- y is positive for scroll up (increase) and negative for scroll down (decrease)
+                local newValue = sp.current + (y * step)
+                print("  New value (before clamping): " .. newValue)
+
+                -- Clamp the value within range based on parameter type
+                if sp.type == "enum" then
+                    -- For enum parameters, clamp between 1 and the number of values
+                    if sp.values then
+                        newValue = math.max(1, math.min(#sp.values, newValue))
+                        print("  Clamped enum value: " .. newValue .. " (" ..
+                                  sp.values[math.floor(newValue)] .. ")")
+                    end
+                else
+                    -- For numeric parameters (integer, float), use min/max
+                    newValue = math.max(sp.min, math.min(sp.max, newValue))
+                    print("  Clamped numeric value: " .. newValue)
+                end
+
+                -- Only update if value actually changed
+                if newValue ~= sp.current then
+                    -- For automated parameters, adjust the base value to maintain the same CV offset
+                    if M.parameterAutomation[i] then
+                        local cvOffset = sp.current -
+                                             (sp.baseValue or sp.current)
+                        sp.baseValue = newValue - cvOffset
+                        print(
+                            "  Updated base value for automated parameter: " ..
+                                sp.baseValue)
+                    end
+                    sp.current = newValue
+                    print("  Set new value: " .. sp.current)
+
+                    -- Update the script's parameters using the helper module
+                    M.helpers.updateScriptParameters(M.scriptParameters,
+                                                     M.script)
+                    print("  Updated script parameters")
+                end
+
+                return true
             end
-        else
-            print("  Using default step: " .. step)
         end
 
-        -- y is positive for scroll up (increase) and negative for scroll down (decrease)
-        local newValue = param.current + (y * step)
-        print("  New value (before clamping): " .. newValue)
-
-        -- Clamp the value within range based on parameter type
-        if param.type == "enum" then
-            -- For enum parameters, clamp between 1 and the number of values
-            if param.values then
-                newValue = math.max(1, math.min(#param.values, newValue))
-                print("  Clamped enum value: " .. newValue .. " (" ..
-                          param.values[math.floor(newValue)] .. ")")
-            end
-        else
-            -- For numeric parameters (integer, float), use min/max
-            newValue = math.max(param.min, math.min(param.max, newValue))
-            print("  Clamped numeric value: " .. newValue)
-        end
-
-        -- Only update if value actually changed
-        if newValue ~= param.current then
-            -- For automated parameters, adjust the base value to maintain the same CV offset
-            if M.parameterAutomation[M.activeKnob] then
-                local cvOffset = param.current -
-                                     (param.baseValue or param.current)
-                param.baseValue = newValue - cvOffset
-                print("  Updated base value for automated parameter: " ..
-                          param.baseValue)
-            end
-            param.current = newValue
-            print("  Set new value: " .. param.current)
-
-            -- Update the script's parameters using the helper module
-            M.helpers.updateScriptParameters(M.scriptParameters, M.script)
-            print("  Updated script parameters")
-        else
-            print("  Value unchanged, no update needed")
-        end
-
-        return true
+        print("  No knob found under cursor")
     else
-        if not M.activeKnob then
-            print("  No active knob")
-        elseif not M.scriptParameters then
-            print("  Script parameters are nil")
-        else
-            print(
-                "  Active knob index out of range: " .. M.activeKnob .. " > " ..
-                    #M.scriptParameters)
-        end
+        print("  No script parameters available")
     end
 
     return false
