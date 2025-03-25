@@ -1,6 +1,7 @@
 -- osc_client.lua
 local osc = require("osc")
 local config = require("config")
+local debug_utils = require("debug_utils")
 
 -- This might be undefined if emulator.lua isn't loaded yet
 local emulator
@@ -22,7 +23,7 @@ local function isDebugMode()
 end
 
 -- Helper function to log debug information
-local function debugLog(...) if isDebugMode() then print("[OSC DEBUG]", ...) end end
+local function debugLog(...) debug_utils.debugLog("[OSC]", ...) end
 
 -- Initialize the OSC client
 function osc_client.init()
@@ -31,7 +32,7 @@ function osc_client.init()
 
     -- Enable OSC detailed debugging if emulator debug mode is on
     if isDebugMode() then
-        print("[OSC DEBUG] Enabling detailed OSC debugging")
+        debugLog("Enabling detailed OSC debugging")
         if osc.enableDebug then osc.enableDebug(true) end
     end
 
@@ -117,7 +118,7 @@ function osc_client.sendOutputs(outputs)
     if not address:match("^/") then address = "/" .. address end
 
     -- Debug output summary if enabled
-    if emulator and emulator.isDebugMode and emulator.isDebugMode() then
+    if debug_utils.isDebugMode() then
         debugLog("Sending OSC values:", #outputs, "outputs")
         for i, value in ipairs(outputs) do
             local outputAddress = getOutputAddress(i)

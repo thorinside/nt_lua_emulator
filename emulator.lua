@@ -13,6 +13,7 @@ local osc_client = require("osc_client")
 local config = require("config")
 local MinimalMode = require("minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
+local debug_utils = require("debug_utils")
 
 --------------------------------------------------------------------------------
 -- Configuration
@@ -495,8 +496,8 @@ local function loadScript(scriptPath)
     _G.focusParameter = function(algorithm, parameter)
         -- In a real device, this would focus UI on a specific parameter
         -- For the emulator, we'll just log it
-        print("Focusing on parameter " .. parameter .. " of algorithm " ..
-                  algorithm)
+        debug_utils.debugLog("Focusing on parameter " .. parameter ..
+                                 " of algorithm " .. algorithm)
         -- We could potentially store the current focused parameter for display
         -- but for now this is just a stub
     end
@@ -944,7 +945,7 @@ function M.update(dt)
                               string.format("[%d]=%.2fV ", i, prevGateStates[i])
             end
         end
-        if string.len(gateLog) > 13 then print(gateLog) end
+        if string.len(gateLog) > 13 then debug_utils.debugLog(gateLog) end
     end
 
     -- Script reload checks are the same...
@@ -1232,12 +1233,14 @@ function M.update(dt)
 
     for i = 1, 12 do
         local inputType = physInputToScriptType[i]
+        local scale = inputScaling[i] or 1.0
 
         if inputClock[i] then
             -- Clock mode - generate gate signals based on BPM
             local phase = time % period
-            local gateValue = (phase < halfPeriod) and 5 or 0
-            currentInputs[i] = gateValue
+            local baseValue = (phase < halfPeriod) and 5 or 0
+            -- Apply scaling to the base value
+            currentInputs[i] = baseValue * scale
 
             -- Process gate inputs by checking which script inputs this physical input is assigned to
             for scriptInputIdx, assignedPhysInput in pairs(
@@ -1246,14 +1249,16 @@ function M.update(dt)
                     -- Found an assignment, check if it's a kGate
                     if type(script.inputs) == "table" and
                         script.inputs[scriptInputIdx] == kGate and script.gate then
-                        local prev = prevGateStates[i] or gateValue
-                        if prev ~= gateValue then
-                            local rising = (gateValue > prev)
+                        local prev = prevGateStates[i] or currentInputs[i]
+                        if prev ~= currentInputs[i] then
+                            local rising = (currentInputs[i] > prev)
                             if debugMode then
-                                print(string.format(
-                                          "GATE CHANGE: [%d] %.2fV -> %.2fV (rising=%s)",
-                                          i, prev, gateValue,
-                                          rising and "true" or "false"))
+                                debug_utils.debugLog(string.format(
+                                                         "GATE CHANGE: [%d] %.2fV -> %.2fV (rising=%s)",
+                                                         i, prev,
+                                                         currentInputs[i],
+                                                         rising and "true" or
+                                                             "false"))
                             end
                             safeScriptCall(script.gate, script, scriptInputIdx,
                                            rising)
@@ -1266,22 +1271,23 @@ function M.update(dt)
         elseif inputType == kTrigger then
             -- Trigger input - show pulse when active
             if triggerPulseActive[i] then
-                currentInputs[i] = 10.0 -- High voltage during pulse
+                currentInputs[i] = 10.0 * scale -- High voltage during pulse, scaled
             else
                 currentInputs[i] = 0.0 -- Zero when inactive
             end
         else
             -- CV mode - generate continuous values with sine waves
-            local scale = inputScaling[i] or 1.0
+            local baseValue = math.sin(time + i)
 
             if inputPolarity[i] == kBipolar then
                 -- Bipolar mode: -5V to +5V
-                currentInputs[i] = 5 * scale * math.sin(time + i)
+                currentInputs[i] = 5 * scale * baseValue
                 -- Clamp to valid range
                 currentInputs[i] = math.max(-5, math.min(5, currentInputs[i]))
             else
                 -- Unipolar mode: 0V to +10V
-                currentInputs[i] = 5 + (5 * scale * math.sin(time + i))
+                -- First scale the base value, then shift to unipolar range
+                currentInputs[i] = 5 + (5 * scale * baseValue)
                 -- Clamp to valid range
                 currentInputs[i] = math.max(0, math.min(10, currentInputs[i]))
             end
@@ -1324,9 +1330,9 @@ function M.update(dt)
             if value ~= nil then
                 -- Debug negative values specifically to find -5V
                 if debugMode and value < 0 then
-                    print(string.format(
-                              "[DEBUG] Negative output detected: [%d] = %.6f",
-                              slot, value))
+                    debug_utils.debugLog(string.format(
+                                             "[DEBUG] Negative output detected: [%d] = %.6f",
+                                             slot, value))
                 end
 
                 local mappedOutput = scriptOutputAssignments[slot]
@@ -2058,18 +2064,22 @@ function M.mousepressed(x, y, button)
             if dx * dx + dy * dy <= paramKnobRadius ^ 2 then
                 if isDoubleClick and lastClickType == "knob" and lastClickIndex ==
                     i then
-                    -- Double-clicked on parameter knob - clear any automation
-                    if parameterAutomation[i] then
-                        print(
-                            "Removed automation for parameter " .. i .. " (" ..
-                                sp.name .. ")")
-                        parameterAutomation[i] = nil
-
-                        -- Reset to base value and clear the stored base value
-                        if sp.baseValue then
-                            sp.current = sp.baseValue
+                    -- Double-clicked on parameter knob - reset to default value
+                    if sp.default then
+                        -- Clear any automation
+                        if parameterAutomation[i] then
+                            print("Removed automation for parameter " .. i ..
+                                      " (" .. sp.name .. ")")
+                            parameterAutomation[i] = nil
                             sp.baseValue = nil
                         end
+
+                        -- Reset to default value
+                        sp.current = sp.default
+                        -- Update the script's parameters using the helper module
+                        helpers.updateScriptParameters(scriptParameters, script)
+                        print("Reset parameter " .. i .. " (" .. sp.name ..
+                                  ") to default value: " .. sp.default)
                     end
 
                     -- Reset double-click state
@@ -2588,13 +2598,21 @@ function M.wheelmoved(x, y)
 
         -- Only update if value actually changed
         if newValue ~= param.current then
+            -- For automated parameters, adjust the base value to maintain the same CV offset
+            if parameterAutomation[activeKnob] then
+                local cvOffset = param.current -
+                                     (param.baseValue or param.current)
+                param.baseValue = newValue - cvOffset
+            end
             param.current = newValue
+
             -- Update the script's parameters using the helper module
             helpers.updateScriptParameters(scriptParameters, script)
 
             -- Print debug info
-            print(string.format("Parameter %d (%s) value changed: %.3f",
-                                activeKnob, param.name, newValue))
+            debug_utils.debugLog(string.format(
+                                     "Parameter %d (%s) value changed: %.3f",
+                                     activeKnob, param.name, newValue))
         end
 
         return true

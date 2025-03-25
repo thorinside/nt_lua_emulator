@@ -1,5 +1,6 @@
 -- helpers.lua
 local helpers = {}
+local debug_utils = require("debug_utils")
 
 function helpers.voltageToColor(v)
     if v < 0 then
@@ -59,10 +60,11 @@ function helpers.parseScriptParameters(paramsTable)
         end
 
         -- Log parameter parsing for debugging
-        print(string.format(
-                  "Parsed parameter %d: %s (type=%s, min=%.3f, max=%.3f, default=%.3f, unit=%s, scale=%s)",
-                  i, entry.name, entry.type, entry.min, entry.max,
-                  entry.default, entry.unit, tostring(entry.scale)))
+        debug_utils.debugLog(string.format(
+                                 "Parsed parameter %d: %s (type=%s, min=%.3f, max=%.3f, default=%.3f, unit=%s, scale=%s)",
+                                 i, entry.name, entry.type, entry.min,
+                                 entry.max, entry.default, entry.unit,
+                                 tostring(entry.scale)))
 
         scriptParameters[i] = entry
     end
@@ -88,9 +90,9 @@ function helpers.updateScriptParameters(scriptParameters, script)
     -- Add debugging information for parameters
     if script.paramDebug == nil then
         script.paramDebug = true
-        print("Script parameter values:")
+        debug_utils.debugLog("Script parameter values:")
         for i, value in ipairs(script.parameters) do
-            print("Parameter " .. i .. ": " .. tostring(value))
+            debug_utils.debugLog("Parameter " .. i .. ": " .. tostring(value))
         end
     end
 end

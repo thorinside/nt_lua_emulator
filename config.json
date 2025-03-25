@@ -1,11 +1,11 @@
 {
   "osc":{
     "sendInterval":0.001,
-    "port":8000,
-    "enabled":false,
     "host":"127.0.0.1",
+    "port":8000,
+    "address":"/ch",
     "outputFormat":"single",
-    "address":"/ch"
+    "enabled":false
   },
   "script":{
     "path":"/Users/nealsanche/Downloads/to_neal/particles_beta_0.lua"
