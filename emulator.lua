@@ -605,119 +605,32 @@ local function loadScript(scriptPath)
     if osc_client then osc_client.setScript(newScript) end
 
     -- Set up control callbacks
-    local controlCallbacks = {
-        onButtonPress = function(buttonIndex)
-            if script then
-                local functionName = "button" .. buttonIndex .. "Push"
-                if script[functionName] then
-                    print("Button " .. buttonIndex ..
-                              " pressed, calling script." .. functionName)
-                    safeScriptCall(script[functionName], script)
-                elseif script.button then
-                    print("Button " .. buttonIndex ..
-                              " pressed, calling script.button")
-                    safeScriptCall(script.button, script, buttonIndex, true)
-                end
+    if newScript.button then
+        -- If the script has a button function, use it for all buttons
+        for i = 1, 4 do
+            newScript["button" .. i .. "Push"] = function()
+                safeScriptCall(newScript.button, newScript, i, true)
             end
-        end,
-        onButtonRelease = function(buttonIndex)
-            if script then
-                local functionName = "button" .. buttonIndex .. "Release"
-                if script[functionName] then
-                    print("Button " .. buttonIndex ..
-                              " released, calling script." .. functionName)
-                    safeScriptCall(script[functionName], script)
-                elseif script.button then
-                    print("Button " .. buttonIndex ..
-                              " released, calling script.button")
-                    safeScriptCall(script.button, script, buttonIndex, false)
-                end
-            end
-        end,
-        onPotChange = function(potIndex, value)
-            if script then
-                local functionName = "pot" .. potIndex .. "Turn"
-                if script[functionName] then
-                    print("Pot " .. potIndex .. " changed to " .. value ..
-                              ", calling script." .. functionName)
-                    safeScriptCall(script[functionName], script, value)
-                elseif script.pot then
-                    print("Pot " .. potIndex .. " changed to " .. value ..
-                              ", calling script.pot")
-                    safeScriptCall(script.pot, script, potIndex, value)
-                end
-            end
-        end,
-        onPotPress = function(potIndex)
-            if script then
-                local functionName = "pot" .. potIndex .. "Push"
-                if script[functionName] then
-                    print("Pot " .. potIndex .. " pressed, calling script." ..
-                              functionName)
-                    safeScriptCall(script[functionName], script)
-                end
-            end
-        end,
-        onPotRelease = function(potIndex)
-            if script then
-                local functionName = "pot" .. potIndex .. "Release"
-                if script[functionName] then
-                    print("Pot " .. potIndex .. " released, calling script." ..
-                              functionName)
-                    safeScriptCall(script[functionName], script)
-                end
-            end
-        end,
-        onEncoderChange = function(encoderIndex, delta)
-            if script then
-                local functionName = "encoder" .. encoderIndex .. "Turn"
-                if script[functionName] then
-                    print(
-                        "Encoder " .. encoderIndex .. " changed by " .. delta ..
-                            ", calling script." .. functionName)
-                    safeScriptCall(script[functionName], script, delta)
-                elseif script.encoder then
-                    print(
-                        "Encoder " .. encoderIndex .. " changed by " .. delta ..
-                            ", calling script.encoder")
-                    safeScriptCall(script.encoder, script, encoderIndex, delta)
-                end
-            end
-        end,
-        onEncoderPress = function(encoderIndex)
-            if script then
-                local functionName = "encoder" .. encoderIndex .. "Push"
-                if script[functionName] then
-                    print("Encoder " .. encoderIndex ..
-                              " pressed, calling script." .. functionName)
-                    safeScriptCall(script[functionName], script)
-                end
-            end
-        end,
-        onEncoderRelease = function(encoderIndex)
-            if script then
-                local functionName = "encoder" .. encoderIndex .. "Release"
-                if script[functionName] then
-                    print("Encoder " .. encoderIndex ..
-                              " released, calling script." .. functionName)
-                    safeScriptCall(script[functionName], script)
-                end
+            newScript["button" .. i .. "Release"] = function()
+                safeScriptCall(newScript.button, newScript, i, false)
             end
         end
-    }
+    end
 
-    controls.setCallbacks(controlCallbacks)
-
-    -- Set active overlay based on script callbacks
-    if hasControlCallbacks(newScript) then
-        activeOverlay = "controls"
-
-        -- Update window height to match if changed
-        local wx, wy = love.window.getPosition()
-        love.window.setMode(scaledDisplayWidth,
-                            calculateWindowHeight(activeOverlay),
-                            {resizable = false, msaa = 8, vsync = 1})
-        love.window.setPosition(wx, wy)
+    -- Save the script path to state.json
+    local state = {}
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success then state = result end
+    end
+    state.scriptPath = scriptPath
+    local stateFile = io.open("state.json", "w")
+    if stateFile then
+        stateFile:write(json.encode(state, {indent = true}))
+        stateFile:close()
     end
 
     return newScript, newScriptParameters
@@ -844,6 +757,17 @@ function M.load()
     -- Initialize OSC client first
     osc_client.init()
 
+    -- Try to load script path from state.json first
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success and result.scriptPath then
+            scriptPath = result.scriptPath
+        end
+    end
+
     -- Load the script
     script, scriptParameters = loadScript(scriptPath)
 
@@ -873,8 +797,17 @@ function M.load()
     for i = 1, scriptInputCount do scriptInputAssignments[i] = nil end
     for i = 1, scriptOutputCount do scriptOutputAssignments[i] = nil end
 
-    -- Try to load saved state, or create default mappings if no state exists
-    if not loadIOState() then createDefaultMappings() end
+    -- Create default mappings first
+    createDefaultMappings()
+
+    -- Then try to load saved state, which will override defaults if it exists
+    if loadIOState() then
+        print("Loaded I/O mappings from state.json")
+    else
+        print("No saved state found, using default mappings")
+        -- Save the default mappings to state.json
+        saveIOState()
+    end
 
     -- Initialize minimal mode with display module
     if not minimalModeInitialized then
@@ -896,19 +829,9 @@ function M.load()
     minimalModeEnabled = cfg and cfg.minimalMode or false
 
     -- Calculate correct window size based on minimal mode
-    if minimalModeEnabled then
-        MinimalMode.activate()
-        -- Set window to display size only
-        local config = display.getConfig()
-        love.window.setMode(config.width * config.scaling,
-                            config.height * config.scaling,
-                            {resizable = false, msaa = 8, vsync = 1})
-    else
-        -- For normal mode, use calculated window height based on active overlay
-        windowHeight = calculateWindowHeight(activeOverlay)
-        love.window.setMode(windowWidth, windowHeight,
-                            {resizable = false, msaa = 8, vsync = 1})
-    end
+    windowHeight = calculateWindowHeight(activeOverlay)
+    love.window.setMode(windowWidth, windowHeight,
+                        {resizable = false, msaa = 8, vsync = 1})
 end
 
 -- Modify the update function to support minimal mode
