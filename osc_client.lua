@@ -97,13 +97,8 @@ local function getOutputAddress(index)
     -- Ensure address is a string and starts with /
     baseAddress = tostring(baseAddress)
     if not baseAddress:match("^/") then baseAddress = "/" .. baseAddress end
-    if script and script.outputNames and script.outputNames[index] then
-        -- Use the output name if available
-        return baseAddress .. "/" .. toOSCName(script.outputNames[index])
-    else
-        -- Fall back to numbered format
-        return baseAddress .. "/output_" .. index
-    end
+    -- Add slash between base address and channel number
+    return baseAddress .. "/" .. index
 end
 
 -- Send output values via OSC
@@ -125,9 +120,8 @@ function osc_client.sendOutputs(outputs)
     if emulator and emulator.isDebugMode and emulator.isDebugMode() then
         debugLog("Sending OSC values:", #outputs, "outputs")
         for i, value in ipairs(outputs) do
-            local outputName = script and script.outputNames and
-                                   script.outputNames[i] or ("output_" .. i)
-            debugLog(string.format("  [%d] %s = %.6f", i, outputName, value))
+            local outputAddress = getOutputAddress(i)
+            debugLog(string.format("  %s = %.6f", outputAddress, value))
         end
     end
 

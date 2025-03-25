@@ -881,17 +881,10 @@ function M.load()
                          function(paramIndex, newValue)
             -- Update the parameter in scriptParameters
             if scriptParameters and scriptParameters[paramIndex] then
-                scriptParameters[paramIndex].current = newValue
-                -- Update the script's parameters
-                if script and script.parameters then
-                    local param = scriptParameters[paramIndex]
-                    if param.type == "float" and param.scale then
-                        -- Apply scaling for float parameters when updating script
-                        script.parameters[paramIndex] = newValue / param.scale
-                    else
-                        script.parameters[paramIndex] = newValue
-                    end
-                end
+                local param = scriptParameters[paramIndex]
+                param.current = newValue
+                -- Update the script's parameters using the helper module
+                helpers.updateScriptParameters(scriptParameters, script)
             end
         end)
         minimalModeInitialized = true
@@ -1382,7 +1375,7 @@ function M.update(dt)
                 normalizedCV = inputValue / 10.0 -- 0 to 1
             end
 
-            -- Calculate parameter range
+            -- Calculate parameter range (using unscaled values)
             local paramRange = sp.max - sp.min
 
             -- Apply the normalized CV to the parameter range
@@ -1396,10 +1389,10 @@ function M.update(dt)
                 newValue = math.floor(newValue + 0.5)
             end
 
-            -- Ensure value is within bounds
+            -- Ensure value is within bounds (using unscaled values)
             sp.current = math.max(sp.min, math.min(sp.max, newValue))
 
-        elseif sp and sp.type == "enum" and sp.values then
+        elseif sp and sp.type == "enum" then
             -- For enum parameters, normalize CV to control enum indices
             local valueCount = #sp.values
 
@@ -2566,13 +2559,13 @@ function M.wheelmoved(x, y)
         -- Adjust step size based on parameter type
         if param.type == "float" then
             if param.scale == kBy10 then
-                -- For kBy10, use step of 1.0 in the display units (which is 0.1 in script units)
+                -- For kBy10, use step of 1.0 in display units
                 step = 1.0
             elseif param.scale == kBy100 then
-                -- For kBy100, use step of 1.0 in the display units (which is 0.01 in script units)
+                -- For kBy100, use step of 1.0 in display units
                 step = 1.0
             elseif param.scale == kBy1000 then
-                -- For kBy1000, use step of 1.0 in the display units (which is 0.001 in script units)
+                -- For kBy1000, use step of 1.0 in display units
                 step = 1.0
             else
                 step = 0.1 -- Default for float without scaling
@@ -2589,30 +2582,15 @@ function M.wheelmoved(x, y)
                 newValue = math.max(1, math.min(#param.values, newValue))
             end
         else
-            -- For numeric parameters (integer, float), use displayMin/displayMax when available
-            if param.type == "float" and param.displayMin ~= nil and
-                param.displayMax ~= nil then
-                newValue = math.max(param.displayMin,
-                                    math.min(param.displayMax, newValue))
-            else
-                newValue = math.max(param.min, math.min(param.max, newValue))
-            end
+            -- For numeric parameters (integer, float), use min/max
+            newValue = math.max(param.min, math.min(param.max, newValue))
         end
 
         -- Only update if value actually changed
         if newValue ~= param.current then
             param.current = newValue
-
-            -- Update the script's parameter if it exists
-            if script and script.parameters and script.parameters[activeKnob] ~=
-                nil then
-                if param.type == "float" and param.scale then
-                    -- Apply scaling for float parameters when updating script
-                    script.parameters[activeKnob] = newValue / param.scale
-                else
-                    script.parameters[activeKnob] = newValue
-                end
-            end
+            -- Update the script's parameters using the helper module
+            helpers.updateScriptParameters(scriptParameters, script)
 
             -- Print debug info
             print(string.format("Parameter %d (%s) value changed: %.3f",

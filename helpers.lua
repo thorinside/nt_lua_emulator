@@ -40,34 +40,30 @@ function helpers.parseScriptParameters(paramsTable)
                 -- Float parameter with scale: { name, min, max, default, unit, scale }
                 entry.type = "float"
                 entry.scale = p[6] -- kBy10, kBy100, or kBy1000
-                -- Store the display values (scaled up)
+                -- Store the display values (unscaled)
                 entry.displayMin = entry.min
                 entry.displayMax = entry.max
                 entry.displayDefault = entry.default
-                -- Store the actual values (scaled down)
-                entry.min = entry.min / entry.scale
-                entry.max = entry.max / entry.scale
-                entry.default = entry.default / entry.scale
+                -- Store the actual values (unscaled)
+                entry.min = entry.min
+                entry.max = entry.max
+                entry.default = entry.default
             else
                 -- Integer parameter: { name, min, max, default, unit }
                 entry.type = "integer"
                 entry.scale = 1
             end
 
-            -- For scaled parameters, set current to displayDefault (UI value)
-            -- For non-scaled parameters, set current to default
-            if entry.type == "float" and entry.scale ~= 1 then
-                entry.current = entry.displayDefault
-            else
-                entry.current = entry.default
-            end
-
-            -- Log parameter parsing for debugging
-            print(string.format(
-                      "Parsed parameter %d: %s (type=%s, min=%.3f, max=%.3f, default=%.3f, unit=%s, scale=%s)",
-                      i, entry.name, entry.type, entry.min, entry.max,
-                      entry.default, entry.unit, tostring(entry.scale)))
+            -- Set current to default (unscaled value)
+            entry.current = entry.default
         end
+
+        -- Log parameter parsing for debugging
+        print(string.format(
+                  "Parsed parameter %d: %s (type=%s, min=%.3f, max=%.3f, default=%.3f, unit=%s, scale=%s)",
+                  i, entry.name, entry.type, entry.min, entry.max,
+                  entry.default, entry.unit, tostring(entry.scale)))
+
         scriptParameters[i] = entry
     end
     return scriptParameters
@@ -77,8 +73,8 @@ end
 function helpers.updateScriptParameters(scriptParameters, script)
     script.parameters = {}
     for i, sp in ipairs(scriptParameters) do
-        if sp.type == "float" then
-            -- For float parameters, we need to scale down by the scale factor
+        if sp.type == "float" and sp.scale then
+            -- For float parameters, we need to scale down for the script
             script.parameters[i] = sp.current / sp.scale
         elseif sp.type == "integer" then
             -- For integer parameters, ensure we're passing integers

@@ -1,14 +1,14 @@
 {
-  "minimalMode":true,
+  "osc":{
+    "sendInterval":0.001,
+    "port":8000,
+    "enabled":false,
+    "host":"127.0.0.1",
+    "outputFormat":"single",
+    "address":"/ch"
+  },
   "script":{
     "path":"/Users/nealsanche/Downloads/to_neal/particles_beta_0.lua"
   },
-  "osc":{
-    "sendInterval":0.001,
-    "enabled":false,
-    "host":"127.0.0.1",
-    "port":8000,
-    "address":"/dnt",
-    "outputFormat":"single"
-  }
+  "minimalMode":false
 }

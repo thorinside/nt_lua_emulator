@@ -34,13 +34,11 @@ function MinimalMode.init(displayModule, params, callback)
     isActive = false
     onParameterChange = callback
 
-    -- Try to load Noto Sans font for Unicode arrow characters
     local fontSuccess, fontErr = pcall(function()
         uiFont = love.graphics.newFont("fonts/Gidole-Regular.ttf", 12)
     end)
 
     if not fontSuccess then
-        print("Noto Sans font loading failed: " .. tostring(fontErr))
         -- Fall back to default font
         uiFont = love.graphics.newFont(10)
     end
@@ -66,7 +64,33 @@ function MinimalMode.setParameters(params) scriptParameters = params end
 -- Set error message to display
 function MinimalMode.setError(err) errorMessage = err end
 
--- Add helper function to handle key presses
+-- Add helper function to handle parameter value display and scaling
+local function getDisplayValue(param)
+    -- Return the unscaled value directly since we're storing unscaled values
+    return param.current
+end
+
+-- Add helper function to handle parameter value changes with scaling
+local function adjustParameterValue(param, change)
+    local oldValue = param.current
+    local newValue = oldValue
+
+    if param.type == "integer" then
+        newValue = math.min(param.max, math.max(param.min, oldValue + change))
+    elseif param.type == "float" then
+        -- Apply change directly to unscaled value
+        newValue = math.min(param.max, math.max(param.min, oldValue + change))
+    elseif param.type == "enum" then
+        local newIndex = oldValue + change
+        if newIndex >= 1 and newIndex <= #param.values then
+            newValue = newIndex
+        end
+    end
+
+    return newValue
+end
+
+-- Modify handleKeyPress to use the new helper functions
 local function handleKeyPress(key)
     if not scriptParameters or #scriptParameters == 0 then return end
 
@@ -74,29 +98,31 @@ local function handleKeyPress(key)
         -- Handle parameter value changes
         local param = scriptParameters[currentParameter]
         if param then
-            local oldValue = param.current
+            local change
             if param.type == "integer" then
-                local change = (key == "up") and 1 or -1
-                param.current = math.min(param.max, math.max(param.min,
-                                                             param.current +
-                                                                 change))
+                change = (key == "up") and 1 or -1
             elseif param.type == "float" then
-                local change = (key == "up") and 0.1 or -0.1
-                param.current = math.min(param.max, math.max(param.min,
-                                                             param.current +
-                                                                 change))
-            elseif param.type == "enum" then
-                local change = (key == "up") and 1 or -1
-                local newIndex = param.current + change
-                if newIndex >= 1 and newIndex <= #param.values then
-                    param.current = newIndex
+                -- Use unscaled change values
+                if param.scale == kBy10 then
+                    change = (key == "up") and 1.0 or -1.0
+                elseif param.scale == kBy100 then
+                    change = (key == "up") and 1.0 or -1.0
+                elseif param.scale == kBy1000 then
+                    change = (key == "up") and 1.0 or -1.0
+                else
+                    change = (key == "up") and 0.1 or -0.1
                 end
+            elseif param.type == "enum" then
+                change = (key == "up") and 1 or -1
             end
 
+            local newValue = adjustParameterValue(param, change)
+
             -- Only trigger callback if value actually changed
-            if param.current ~= oldValue then
+            if newValue ~= param.current then
+                param.current = newValue
                 if onParameterChange then
-                    onParameterChange(currentParameter, param.current)
+                    onParameterChange(currentParameter, newValue)
                 end
             end
         end
@@ -205,15 +231,14 @@ function MinimalMode.draw()
     local displayW = config.width * config.scaling
     local displayH = config.height * config.scaling
 
-    -- Draw parameter info at the bottom of the display
+    -- Draw parameter info at the top of the display
     if scriptParameters and currentParameter <= #scriptParameters then
         local param = scriptParameters[currentParameter]
-        love.graphics.setColor(0, 0, 0, 0.7)
-        love.graphics.rectangle("fill", 0, displayH - 20, displayW, 20)
 
-        love.graphics.setColor(1, 1, 1, 1)
+        -- Use teal color (0, 128/255, 128/255 is a nice teal)
+        love.graphics.setColor(0, 0.7, 0.7, 1)
         local paramName = param.name or "Parameter " .. currentParameter
-        local paramValue = param.current
+        local paramValue = getDisplayValue(param)
 
         -- Format value based on type
         local valueStr = tostring(paramValue)
@@ -229,13 +254,13 @@ function MinimalMode.draw()
         love.graphics.setFont(uiFont)
 
         -- Draw parameter info
-        love.graphics.printf(paramName .. ": " .. valueStr, 5, displayH - 17,
-                             displayW - 10, "left")
+        love.graphics.printf(paramName .. ": " .. valueStr, 5, 3, displayW - 10,
+                             "left")
 
-        -- Draw navigation hint with Unicode arrows and fade
-        love.graphics.setColor(1, 1, 1, helpTextAlpha)
-        love.graphics.printf("← → to select  ↑ ↓ to adjust", 5,
-                             displayH - 17, displayW - 10, "right")
+        -- Draw navigation hint with Unicode arrows and fade (also in teal)
+        love.graphics.setColor(0, 0.7, 0.7, helpTextAlpha)
+        love.graphics.printf("← → to select  ↑ ↓ to adjust", 5, 3,
+                             displayW - 10, "right")
 
         -- Restore previous font
         love.graphics.setFont(prevFont)
