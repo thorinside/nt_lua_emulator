@@ -63,6 +63,7 @@ function M.init(deps)
     knobDragIndex = nil
     scalingInput = nil
     activeKnob = nil
+    M.activeKnob = nil
     pendingClickActions = {}
 
     return M
@@ -538,7 +539,8 @@ function M.mousemoved(x, y, dx, dy)
         }
 
         -- Reset active knob
-        activeKnob = nil
+        local prevActiveKnob = M.activeKnob
+        M.activeKnob = nil
 
         -- Check if mouse is over any knob
         for i, sp in ipairs(M.scriptParameters) do
@@ -546,9 +548,17 @@ function M.mousemoved(x, y, dx, dy)
             local dx = lx - knobX
             local dy = ly - knobY
             if dx * dx + dy * dy <= M.paramKnobRadius * M.paramKnobRadius then
-                activeKnob = i
+                M.activeKnob = i
+                if prevActiveKnob ~= i then
+                    print("Mouse hovering over knob " .. i .. " (" .. sp.name ..
+                              ")")
+                end
                 break
             end
+        end
+
+        if prevActiveKnob and not M.activeKnob then
+            print("Mouse no longer hovering over any knob")
         end
     end
 
@@ -692,6 +702,9 @@ end
 
 -- Mouse wheel event handler
 function M.wheelmoved(x, y)
+    print("Wheel moved: x=" .. x .. ", y=" .. y .. ", activeKnob=" ..
+              tostring(M.activeKnob))
+
     -- Adjust y coordinate based on display area at the top
     local displayAreaHeight = M.scaledDisplayHeight
 
@@ -706,58 +719,91 @@ function M.wheelmoved(x, y)
     end
 
     -- First check if controls handled the event
-    if M.controls.wheelmoved(x, y) then return true end
+    if M.controls.wheelmoved(x, y) then
+        print("  Controls handled the wheel event")
+        return true
+    end
 
     -- Handle parameter knob wheel control
-    if activeKnob and M.scriptParameters and activeKnob <= #M.scriptParameters then
-        local param = M.scriptParameters[activeKnob]
+    if M.activeKnob and M.scriptParameters and M.activeKnob <=
+        #M.scriptParameters then
+        local param = M.scriptParameters[M.activeKnob]
         local step = 1
+
+        print("  Active knob: " .. M.activeKnob .. " (" .. param.name .. ")")
+        print("  Current value: " .. param.current)
 
         -- Adjust step size based on parameter type
         if param.type == "float" then
             if param.scale == kBy10 then
                 -- For kBy10, use step of 1.0 in display units
                 step = 1.0
+                print("  Using kBy10 step: " .. step)
             elseif param.scale == kBy100 then
                 -- For kBy100, use step of 1.0 in display units
                 step = 1.0
+                print("  Using kBy100 step: " .. step)
             elseif param.scale == kBy1000 then
                 -- For kBy1000, use step of 1.0 in display units
                 step = 1.0
+                print("  Using kBy1000 step: " .. step)
             else
                 step = 0.1 -- Default for float without scaling
+                print("  Using default float step: " .. step)
             end
+        else
+            print("  Using default step: " .. step)
         end
 
         -- y is positive for scroll up (increase) and negative for scroll down (decrease)
         local newValue = param.current + (y * step)
+        print("  New value (before clamping): " .. newValue)
 
         -- Clamp the value within range based on parameter type
         if param.type == "enum" then
             -- For enum parameters, clamp between 1 and the number of values
             if param.values then
                 newValue = math.max(1, math.min(#param.values, newValue))
+                print("  Clamped enum value: " .. newValue .. " (" ..
+                          param.values[math.floor(newValue)] .. ")")
             end
         else
             -- For numeric parameters (integer, float), use min/max
             newValue = math.max(param.min, math.min(param.max, newValue))
+            print("  Clamped numeric value: " .. newValue)
         end
 
         -- Only update if value actually changed
         if newValue ~= param.current then
             -- For automated parameters, adjust the base value to maintain the same CV offset
-            if M.parameterAutomation[activeKnob] then
+            if M.parameterAutomation[M.activeKnob] then
                 local cvOffset = param.current -
                                      (param.baseValue or param.current)
                 param.baseValue = newValue - cvOffset
+                print("  Updated base value for automated parameter: " ..
+                          param.baseValue)
             end
             param.current = newValue
+            print("  Set new value: " .. param.current)
 
             -- Update the script's parameters using the helper module
             M.helpers.updateScriptParameters(M.scriptParameters, M.script)
+            print("  Updated script parameters")
+        else
+            print("  Value unchanged, no update needed")
         end
 
         return true
+    else
+        if not M.activeKnob then
+            print("  No active knob")
+        elseif not M.scriptParameters then
+            print("  Script parameters are nil")
+        else
+            print(
+                "  Active knob index out of range: " .. M.activeKnob .. " > " ..
+                    #M.scriptParameters)
+        end
     end
 
     return false
@@ -775,7 +821,7 @@ function M.getDraggingState()
 end
 
 -- Get the active knob index
-function M.getActiveKnob() return activeKnob end
+function M.getActiveKnob() return M.activeKnob end
 
 -- Reset dragging state
 function M.resetDragging()
