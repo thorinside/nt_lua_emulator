@@ -475,7 +475,7 @@ function M.mousemoved(x, y, dx, dy)
 
             if sp.type == "integer" then
                 -- Integer parameters always use whole number steps
-                local stepSize = y > 0 and -1 or 1
+                local stepSize = dy > 0 and -1 or 1
 
                 if isAutomated then
                     local newBaseVal = (sp.baseValue or sp.current) + stepSize
@@ -494,7 +494,7 @@ function M.mousemoved(x, y, dx, dy)
             elseif sp.type == "float" then
                 -- Float parameters use scaled values
                 local range = sp.max - sp.min
-                local stepSize = -y * (range / 200) -- Adjust sensitivity based on parameter range
+                local stepSize = -dy * (range / 200) -- Adjust sensitivity based on parameter range
 
                 if isAutomated then
                     local newBaseVal = (sp.baseValue or sp.current) + stepSize
@@ -508,7 +508,7 @@ function M.mousemoved(x, y, dx, dy)
 
             else -- enum type
                 -- Enum parameters always use whole number indices
-                local intDelta = y > 0 and -1 or 1 -- Flip direction for more intuitive control
+                local intDelta = dy > 0 and -1 or 1 -- Flip direction for more intuitive control
 
                 if isAutomated then
                     local newBaseIndex = (sp.baseValue or sp.current) + intDelta
