@@ -52,6 +52,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
     -- Handle both absolute and relative paths
     local filePath = scriptPath
     local newScript
+    local newScriptParameters = {} -- Initialize newScriptParameters here
 
     -- Create the drawing environment FIRST - before any script code runs
     local drawingEnv = display.createDrawingEnvironment()
@@ -249,8 +250,6 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
         newScript = result
     end
-
-    local newScriptParameters = {}
 
     -- Load any saved script state from state.json and set it in the script object
     local state = {}

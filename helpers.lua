@@ -28,6 +28,10 @@ function helpers.parseScriptParameters(paramsTable)
             if entry.current > #entry.values then
                 entry.current = #entry.values
             end
+            -- Set min/max for enum types
+            entry.min = 1
+            entry.max = #entry.values
+            entry.default = entry.current
         else
             -- Numeric parameter
             entry.name = p[1] or ("Param " .. i)
