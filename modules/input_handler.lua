@@ -144,18 +144,9 @@ end
 
 -- Mouse pressed event handler
 function M.mousepressed(x, y, button)
-    -- Adjust y coordinate based on display area at the top
-    local displayAreaHeight = M.scaledDisplayHeight
-
-    -- Calculate scaled coordinates
+    -- Calculate scaled coordinates for other UI elements
     local lx = x / M.uiScaleFactor
-    local ly = y
-    if y > displayAreaHeight then
-        ly = (y - displayAreaHeight) / M.uiScaleFactor +
-                 (displayAreaHeight / M.uiScaleFactor)
-    else
-        ly = y / M.uiScaleFactor
-    end
+    local ly = y / M.uiScaleFactor
 
     -- First check if controls handled the event
     if M.controls.mousepressed(lx, ly, button) then return true end
@@ -192,13 +183,21 @@ function M.mousepressed(x, y, button)
             displayWidth = M.display.getConfig().width,
             panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
             knobRadius = M.paramKnobRadius,
-            knobSpacing = M.paramKnobSpacing
+            knobSpacing = M.paramKnobSpacing,
+            uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
         }
+
+        -- Check if mouse is over any knob
         for i, sp in ipairs(M.scriptParameters) do
+            -- Get knob position in screen coordinates
             local knobX, knobY = M.parameter_knobs.getKnobPosition(i, params)
-            local dx = lx - knobX
-            local dy = ly - knobY
-            if dx * dx + dy * dy <= M.paramKnobRadius ^ 2 then
+            -- Calculate distance using raw mouse coordinates
+            local dx = x - knobX
+            local dy = y - knobY
+
+            -- Use scaled radius for hit testing
+            local hitRadius = M.paramKnobRadius * M.uiScaleFactor
+            if dx * dx + dy * dy <= hitRadius * hitRadius then
                 if isDoubleClick and lastClickType == "knob" and lastClickIndex ==
                     i then
                     -- Double-clicked on parameter knob - reset to default value
@@ -400,26 +399,13 @@ end
 
 -- Mouse moved event handler
 function M.mousemoved(x, y, dx, dy)
-    -- Adjust y coordinate based on display area at the top
-    local displayAreaHeight = M.scaledDisplayHeight
-
     -- Calculate scaled coordinates
     local lx = x / M.uiScaleFactor
-    local ly = y
-    if y > displayAreaHeight then
-        ly = (y - displayAreaHeight) / M.uiScaleFactor +
-                 (displayAreaHeight / M.uiScaleFactor)
-    else
-        ly = y / M.uiScaleFactor
-    end
+    local ly = y / M.uiScaleFactor
 
-    -- Debug output
-    print(string.format(
-              "Mouse moved: raw (%.1f, %.1f), scaled (%.1f, %.1f), scale factor: %.1f",
-              x, y, lx, ly, M.uiScaleFactor))
-
-    -- First check if controls handled the event
-    if M.controls.mousemoved(lx, ly, dx, dy) then return true end
+    -- Scale dx and dy as well
+    local ldx = dx / M.uiScaleFactor
+    local ldy = dy / M.uiScaleFactor
 
     -- Handle scaling inputs with vertical drag
     if scalingInput then
@@ -550,11 +536,17 @@ function M.mousemoved(x, y, dx, dy)
 
         -- Check if mouse is over any knob
         for i, sp in ipairs(M.scriptParameters) do
+            -- Get knob position in screen coordinates
             local knobX, knobY = M.parameter_knobs.getKnobPosition(i, params)
-            local dx = lx - knobX
-            local dy = ly - knobY
-            if dx * dx + dy * dy <= M.paramKnobRadius * M.paramKnobRadius then
+            -- Calculate distance using raw mouse coordinates
+            local dx = x - knobX
+            local dy = y - knobY
+
+            -- Use scaled radius for hit testing
+            local hitRadius = M.paramKnobRadius * M.uiScaleFactor
+            if dx * dx + dy * dy <= hitRadius * hitRadius then
                 M.activeKnob = i
+
                 if prevActiveKnob ~= i then
                     print("Mouse hovering over knob " .. i .. " (" .. sp.name ..
                               ")")
@@ -573,18 +565,9 @@ end
 
 -- Mouse released event handler
 function M.mousereleased(x, y, button)
-    -- Adjust y coordinate based on display area at the top
-    local displayAreaHeight = M.scaledDisplayHeight
-
-    -- Calculate scaled coordinates
+    -- Calculate scaled coordinates for other UI elements
     local lx = x / M.uiScaleFactor
-    local ly = y
-    if y > displayAreaHeight then
-        ly = (y - displayAreaHeight) / M.uiScaleFactor +
-                 (displayAreaHeight / M.uiScaleFactor)
-    else
-        ly = y / M.uiScaleFactor
-    end
+    local ly = y / M.uiScaleFactor
 
     -- First check if controls handled the event
     if M.controls.mousereleased(lx, ly, button) then return true end
@@ -648,12 +631,16 @@ function M.mousereleased(x, y, button)
                 }
 
                 for i, sp in ipairs(M.scriptParameters) do
+                    -- Get knob position in screen coordinates
                     local knobX, knobY =
                         M.parameter_knobs.getKnobPosition(i, params)
-                    local dx = lx - knobX
-                    local dy = ly - knobY
-                    if dx * dx + dy * dy <= M.paramKnobRadius *
-                        M.paramKnobRadius then
+                    -- Calculate distance using raw mouse coordinates
+                    local dx = x - knobX
+                    local dy = y - knobY
+
+                    -- Use scaled radius for hit testing
+                    local hitRadius = M.paramKnobRadius * M.uiScaleFactor
+                    if dx * dx + dy * dy <= hitRadius * hitRadius then
                         -- Store the current value as the base value before automation
                         sp.baseValue = sp.current
                         -- Link the physical input to this parameter
@@ -709,32 +696,16 @@ end
 
 -- Mouse wheel event handler
 function M.wheelmoved(x, y)
-    print("Wheel moved: x=" .. x .. ", y=" .. y .. ", activeKnob=" ..
-              tostring(M.activeKnob))
+    -- Get raw mouse coordinates 
+    local mouseX = love.mouse.getX()
+    local mouseY = love.mouse.getY()
 
-    -- Adjust y coordinate based on display area at the top
-    local displayAreaHeight = M.scaledDisplayHeight
-
-    -- Calculate scaled coordinates
-    local lx = love.mouse.getX() / M.uiScaleFactor
-    local ly = love.mouse.getY()
-    if ly > displayAreaHeight then
-        ly = (ly - displayAreaHeight) / M.uiScaleFactor +
-                 (displayAreaHeight / M.uiScaleFactor)
-    else
-        ly = ly / M.uiScaleFactor
-    end
-
-    -- Debug output
-    print(string.format(
-              "  Mouse coordinates: raw (%.1f, %.1f), scaled (%.1f, %.1f), scale factor: %.1f",
-              love.mouse.getX(), love.mouse.getY(), lx, ly, M.uiScaleFactor))
+    -- Calculate scaled coordinates for other UI elements
+    local lx = mouseX / M.uiScaleFactor
+    local ly = mouseY / M.uiScaleFactor
 
     -- First check if controls handled the event
-    if M.controls.wheelmoved(x, y) then
-        print("  Controls handled the wheel event")
-        return true
-    end
+    if M.controls.wheelmoved(x, y) then return true end
 
     -- Find the knob under the cursor directly in this function
     -- rather than relying on mousemoved to set it
@@ -750,17 +721,16 @@ function M.wheelmoved(x, y)
 
         -- Check if mouse is over any knob
         for i, sp in ipairs(M.scriptParameters) do
+            -- Get knob position in screen coordinates
             local knobX, knobY = M.parameter_knobs.getKnobPosition(i, params)
-            local dx = lx - knobX
-            local dy = ly - knobY
+            -- Calculate distance using raw mouse coordinates
+            local dx = mouseX - knobX
+            local dy = mouseY - knobY
 
             -- Use slightly larger hit radius for wheel events to make it more forgiving
-            local hitRadiusSq = (M.paramKnobRadius * 1.5) *
-                                    (M.paramKnobRadius * 1.5)
-
-            if dx * dx + dy * dy <= hitRadiusSq then
-                print("  Found knob under cursor: " .. i .. " (" .. sp.name ..
-                          ")")
+            local hitRadius = M.paramKnobRadius * M.uiScaleFactor * 1.5
+            if dx * dx + dy * dy <= hitRadius * hitRadius then
+                print("Found knob under cursor: " .. i .. " (" .. sp.name .. ")")
 
                 local step = 1
 

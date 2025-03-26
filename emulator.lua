@@ -482,7 +482,7 @@ function M.update(dt)
     -- Update pending click actions
     inputHandler.updatePendingClicks(love.timer.getTime())
 
-    -- Set state for input handler
+    -- Update state for input handler
     inputHandler.setState({
         script = script,
         scriptInputCount = scriptInputCount,
@@ -502,7 +502,7 @@ function M.update(dt)
         triggerPulseActive = signalProcessor.getTriggerPulseStates().active,
         triggerPulseTimes = signalProcessor.getTriggerPulseStates().times,
         time = time,
-        lastPhysicalIOBottomY = 0,
+        lastPhysicalIOBottomY = io_panel.getLastPhysicalIOBottomY(),
         paramKnobRadius = 12,
         paramKnobSpacing = 80,
         uiScaleFactor = windowManager.getUIScaleFactor(),
@@ -641,6 +641,9 @@ function M.draw()
                 cellH = 40
             })
 
+            -- Store the bottom Y position for use by the input handler
+            io_panel.setLastPhysicalIOBottomY(physicalIOBottomY)
+
             -- Display BPM if there's at least one clock input
             local hasClockInput = false
             local inputClock = signalProcessor.getInputClock()
@@ -694,7 +697,8 @@ function M.draw()
                 panelY = physicalIOBottomY + 24, -- Position 24px below physical I/O section
                 knobRadius = 12,
                 knobSpacing = 80,
-                parameterAutomation = parameterManager.getParameterAutomation()
+                parameterAutomation = parameterManager.getParameterAutomation(),
+                uiScaleFactor = windowManager.getUIScaleFactor()
             })
         end
 
