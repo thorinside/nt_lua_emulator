@@ -58,6 +58,7 @@ return {
             }
         }
     end,
+    setupUi = function(self) return {0.5, 0.5, 1.0} end,
     trigger = function(self, input)
         if input == 2 then
             x = 0
