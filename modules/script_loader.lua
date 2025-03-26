@@ -62,13 +62,22 @@ function M.loadScript(scriptPath, createDefaultMappings)
         _G[funcName] = func
     end
 
-    -- Add custom drawing functions not provided by the display module
+    -- Add custom functions not provided by the display module
 
-    -- Standard behavior for pot3 turning
-    _G.standardPot3Turn = function(x)
-        -- Standard behavior for the third potentiometer
-        -- In the real device, this might scroll through parameters
-        print("Pot 3 turned: " .. x)
+    -- Get voltage on a bus at an algorithm's input
+    _G.getBusVoltage = function(algorithm, busIndex)
+        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
+        -- busIndex is zero-based and ranges from 0 to 11 (for inputs 1-12)
+
+        -- Validate bus index
+        if busIndex < 0 or busIndex >= 12 then
+            return 0.0 -- Return 0V for invalid bus indices
+        end
+
+        -- Get the current input voltage from signal_processor
+        local signalProcessor = require("signal_processor")
+        local currentInputs = signalProcessor.getCurrentInputs()
+        return currentInputs[busIndex + 1] or 0.0 -- Convert zero-based to one-based index
     end
 
     -- Add exit function for compatibility
@@ -119,6 +128,72 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 sp.current = value
             end
         end
+    end
+
+    -- Set a parameter value using normalized range [0.0,1.0]
+    _G.setParameterNormalized = function(algorithm, parameter, normalizedValue)
+        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
+        -- Adjust the parameter index based on parameterOffset
+        local paramIndex = parameter - newScript.parameterOffset
+        if paramIndex >= 1 and paramIndex <= #newScriptParameters then
+            local sp = newScriptParameters[paramIndex]
+            if sp then
+                -- Map normalized value [0.0,1.0] to parameter range [min,max]
+                local value = sp.min + (normalizedValue * (sp.max - sp.min))
+                -- Ensure the value is within bounds
+                if sp.type == "integer" then
+                    value = math.floor(value)
+                end
+                value = math.max(sp.min, math.min(sp.max, value))
+                sp.current = value
+            end
+        end
+    end
+
+    -- Find parameters by name within an algorithm
+    _G.findParameter = function(algorithm, searchName)
+        -- In the emulator, we only have one algorithm, so we ignore the algorithm index
+        local results = {}
+
+        -- If we don't have parameters yet, return empty results
+        if not newScriptParameters then return results end
+
+        -- Search through all parameters
+        for i, param in ipairs(newScriptParameters) do
+            if param.name then
+                -- Check if the parameter name matches directly
+                if param.name == searchName then
+                    table.insert(results, i + newScript.parameterOffset)
+                else
+                    -- Check if it's a prefixed parameter name (e.g., "1:Speed")
+                    local prefix, baseName = param.name:match("^(%d+):(.+)$")
+                    if baseName and baseName == searchName then
+                        table.insert(results, i + newScript.parameterOffset)
+                    end
+                end
+            end
+        end
+
+        return results
+    end
+
+    -- Standard pot turn functions (NOOPs for now)
+    _G.standardPot1Turn = function(value)
+        -- Standard behavior for the first potentiometer
+        -- In the real device, this might control the currently focused parameter
+        print("Pot 1 turned: " .. value)
+    end
+
+    _G.standardPot2Turn = function(value)
+        -- Standard behavior for the second potentiometer
+        -- In the real device, this might control the currently focused parameter
+        print("Pot 2 turned: " .. value)
+    end
+
+    _G.standardPot3Turn = function(value)
+        -- Standard behavior for the third potentiometer
+        -- In the real device, this might control the currently focused parameter
+        print("Pot 3 turned: " .. value)
     end
 
     if scriptPath:sub(1, 1) == "/" then
