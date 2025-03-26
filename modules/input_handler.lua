@@ -74,6 +74,9 @@ function M.init(deps)
     M.activeKnob = nil
     pendingClickActions = {}
 
+    -- Set default UI scale factor
+    M.uiScaleFactor = 1.0
+
     return M
 end
 
