@@ -307,7 +307,7 @@ function M.checkScriptModified(path)
     local info
 
     if path:sub(1, 1) == "/" then
-        -- For absolute paths, use lfs (LuaFileSystem) or fallback to os.stat
+        -- For absolute paths, use lfs (LuaFileSystem) or fallback to io.open
         local success, lfs = pcall(require, "lfs")
         if success then
             info = lfs.attributes(path)
@@ -320,7 +320,7 @@ function M.checkScriptModified(path)
                 return false
             end
         else
-            -- Fallback method using io with rate limiting
+            -- Fallback method using io.open with rate limiting
             local currentTime = love.timer.getTime()
             if currentTime - lastAbsolutePathCheckTime <
                 absolutePathCheckInterval then
@@ -331,15 +331,24 @@ function M.checkScriptModified(path)
             -- Update last check time
             lastAbsolutePathCheckTime = currentTime
 
-            -- Without LuaFileSystem, we can't reliably detect changes to absolute path files
-            -- Instead, we'll only check once on startup (first time) and then require manual reload
-            if scriptLastModified == 0 then
-                -- First time checking this file - mark it as seen and don't reload
-                scriptLastModified = 1 -- Use any non-zero value
-                return false
+            -- Without LuaFileSystem, we'll check if we can open the file and read its contents
+            local file = io.open(path, "r")
+            if file then
+                local contents = file:read("*a")
+                file:close()
+
+                -- Calculate a simple hash of the contents
+                local hash = 0
+                for i = 1, #contents do
+                    hash = (hash * 31 + contents:byte(i)) % 2147483647
+                end
+
+                if hash ~= scriptLastModified then
+                    scriptLastModified = hash
+                    return true
+                end
             end
 
-            -- For subsequent checks, never auto-reload
             return false
         end
     else
@@ -374,8 +383,20 @@ function M.init(notifyFunctions)
                     scriptLastModified = info.modification
                 end
             else
-                -- Without lfs, set to 0 so the first check will set it to 1
-                scriptLastModified = 0
+                -- Without lfs, use content hashing
+                local file = io.open(scriptPath, "r")
+                if file then
+                    local contents = file:read("*a")
+                    file:close()
+
+                    -- Calculate a simple hash of the contents
+                    local hash = 0
+                    for i = 1, #contents do
+                        hash = (hash * 31 + contents:byte(i)) % 2147483647
+                    end
+
+                    scriptLastModified = hash
+                end
             end
         else
             -- For relative paths, use LÖVE's filesystem

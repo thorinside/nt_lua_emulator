@@ -30,6 +30,9 @@ local dx = 5
 local dy = 6.7
 local bing = 0.0
 local gateState = false
+local p1 = 0.5
+local p2 = 0.5
+local p3 = 1.0
 
 local toScreenX = function(x) return 1.0 + 2.5 * (x + 10.0) end
 local toScreenY = function(y) return 12.0 + 2.5 * (10.0 - y) end
@@ -46,6 +49,9 @@ return {
     author = 'Expert Sleepers Ltd',
     init = function(self)
         local state = self.state or {}
+        p1 = state.p1 or 0.5
+        p2 = state.p2 or 0.5
+        p3 = state.p3 or 1.0
         return {
             inputs = {kCV, kTrigger, kGate},
             outputs = 2,
@@ -58,7 +64,7 @@ return {
             }
         }
     end,
-    setupUi = function(self) return {0.5, 0.5, 1.0} end,
+    setupUi = function(self) return {p1, p2, p3} end,
     trigger = function(self, input)
         if input == 2 then
             x = 0
@@ -104,12 +110,9 @@ return {
         out[2] = y + inputs[1]
         return out
     end,
-    pot2Turn = function(self, x)
-        local alg = getCurrentAlgorithm()
-        local p = self.parameterOffset + 1 + x * 3.5
-        focusParameter(alg, p)
-    end,
-    pot3Turn = function(self, x) standardPot3Turn(x) end,
+    pot1Turn = function(self, x) p1 = x end,
+    pot2Turn = function(self, x) p2 = x end,
+    pot3Turn = function(self, x) p3 = x end,
     encoder1Turn = function(self, x) bing = 0.5 end,
     encoder2Turn = function(self, x) bing = 0.5 end,
     pot3Push = function(self) bing = 0.5 end,
@@ -137,7 +140,19 @@ return {
             bing = bing - 0.03
         end
 
-        drawText(100, 40, gateState and "Open" or "Closed")
+        drawText(100, 50, gateState and "Open" or "Closed")
+        drawText(100, 20, "p1: " .. p1)
+        drawText(100, 30, "p2: " .. p2)
+        drawText(100, 40, "p3: " .. p3)
+        drawText(0, 10,
+                 "0123456789-0123456789-0123456789-0123456789-01234567890")
+        drawText(0, 20, "1")
+        drawText(0, 30, "2")
+        drawText(0, 40, "3")
+        drawText(0, 50, "4")
+        drawText(0, 60, "5")
+        drawText(0, 70, "6")
+        return true
     end,
     serialise = function(self)
         local state = {}
@@ -146,6 +161,9 @@ return {
         state.minY = self.parameters[3] * 10
         state.maxY = self.parameters[4] * 10
         state.edges = self.parameters[5]
+        state.p1 = p1
+        state.p2 = p2
+        state.p3 = p3
         return state
     end
 }
