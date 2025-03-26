@@ -52,7 +52,7 @@ function display.init(options)
 
     -- font for drawTinyText (using BMFontRasterizer)
     config.tinyFont = love.graphics.newFont("fonts/tom-thumb.ttf",
-                                            5 * config.scaling)
+                                            6 * config.scaling)
 
     -- Configure window if we're managing it
     if options and options.manageWindow then
@@ -140,7 +140,8 @@ function display.drawText(x, y, text, color)
     love.graphics.setFont(config.pixelFont)
 
     -- Draw the text
-    love.graphics.print(text, x * config.scaling, y * config.scaling)
+    love.graphics.print(text, x * config.scaling,
+                        y * config.scaling - config.pixelFont:getHeight())
 
     love.graphics.pop()
 end
@@ -219,7 +220,8 @@ function display.drawTinyText(x, y, text, color)
     love.graphics.setFont(config.tinyFont)
 
     -- Draw the text
-    love.graphics.print(text, x * config.scaling, y * config.scaling)
+    love.graphics.print(text, x * config.scaling,
+                        y * config.scaling - config.tinyFont:getHeight())
 
     love.graphics.pop()
 end
