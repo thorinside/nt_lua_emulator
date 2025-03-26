@@ -3,6 +3,7 @@ local emulator = require("emulator")
 local PathInputDialog = require("path_input_dialog")
 
 function love.load()
+    -- Initialize everything
     PathInputDialog.init()
     emulator.load()
 end
@@ -77,4 +78,15 @@ function love.textinput(text)
     if PathInputDialog.isOpen() then
         if PathInputDialog.textinput(text) then return end
     end
+end
+
+-- Add a quit callback to save state when the app closes
+function love.quit()
+    print("Application is closing, saving state...")
+
+    -- Call emulator's quit function to save state and clean up
+    if emulator and emulator.quit then emulator.quit() end
+
+    -- Return false to allow the application to close (return true would cancel closing)
+    return false
 end

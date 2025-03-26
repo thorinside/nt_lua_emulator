@@ -12,7 +12,7 @@ local config = {
     scaling = 4,
     baseColor = {0, 1, 1}, -- Electric blue tint (R, G, B)
     canvas = nil,
-    brightnessExp = 0.65, -- Exponent for brightness curve (< 1 makes dim colors brighter)
+    brightnessExp = 0.45, -- Exponent for brightness curve (< 1 makes dim colors brighter)
     pixelFont = nil, -- Will hold the PixelmixRegular font
     tinyFont = nil -- Will hold the tom-thumb font
 }
@@ -25,15 +25,7 @@ local function calculateColor(colorValue)
     -- Base brightness adjustment with better handling for dark colors
     local shade = math.max(colorValue, 0) / 15
 
-    -- For dark colors, use a more gentle curve to preserve distinction
-    if colorValue <= 2 then
-        -- Use a fixed minimum intensity for very dark colors to keep them visible
-        -- but still distinguishable from each other and from black
-        shade = 0.05 + (shade * 0.2) -- Minimum intensity of 0.05 with small scaling
-    else
-        -- Normal brightness curve for regular colors
-        shade = math.pow(shade, config.brightnessExp)
-    end
+    shade = math.pow(shade, config.brightnessExp)
 
     return {
         shade * config.baseColor[1], shade * config.baseColor[2],
@@ -81,6 +73,9 @@ function display.drawRectangle(x1, y1, x2, y2, color)
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
+                            (x2 - x1) * config.scaling,
+                            (y2 - y1) * config.scaling)
+    love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
     love.graphics.pop()
