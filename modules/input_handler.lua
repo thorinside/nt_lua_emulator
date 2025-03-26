@@ -114,22 +114,16 @@ function M.updatePendingClicks(currentTime)
                     -- From bipolar -> clock mode
                     M.inputClock[inputIdx] = true
                     M.markMappingsChanged() -- Mark as changed when mode changes
-                    print("Input " .. inputIdx ..
-                              " set to clock mode (delayed action)")
                 elseif M.inputClock[inputIdx] then
                     -- From clock -> unipolar mode
                     M.inputClock[inputIdx] = false
                     M.inputPolarity[inputIdx] = kUnipolar
                     M.markMappingsChanged() -- Mark as changed when mode changes
-                    print("Input " .. inputIdx ..
-                              " set to unipolar mode (0V to +10V) (delayed action)")
                 else
                     -- From unipolar -> bipolar (default)
                     M.inputPolarity[inputIdx] = kBipolar
                     M.inputClock[inputIdx] = false
                     M.markMappingsChanged() -- Mark as changed when mode changes
-                    print("Input " .. inputIdx ..
-                              " set to bipolar mode (-5V to +5V) (delayed action)")
                 end
             end
 
@@ -204,8 +198,6 @@ function M.mousepressed(x, y, button)
                     if sp.default then
                         -- Clear any automation
                         if M.parameterAutomation[i] then
-                            print("Removed automation for parameter " .. i ..
-                                      " (" .. sp.name .. ")")
                             M.parameterAutomation[i] = nil
                             sp.baseValue = nil
                         end
@@ -215,8 +207,6 @@ function M.mousepressed(x, y, button)
                         -- Update the script's parameters using the helper module
                         M.helpers.updateScriptParameters(M.scriptParameters,
                                                          M.script)
-                        print("Reset parameter " .. i .. " (" .. sp.name ..
-                                  ") to default value: " .. sp.default)
                     end
 
                     -- Reset double-click state
@@ -253,7 +243,6 @@ function M.mousepressed(x, y, button)
                     lastClickIndex == i then
                     -- Double-clicked on script input - clear assignment
                     if M.scriptInputAssignments[i] then
-                        print("Cleared input assignment for script input " .. i)
                         M.scriptInputAssignments[i] = nil
                         M.markMappingsChanged()
                     end
@@ -285,8 +274,6 @@ function M.mousepressed(x, y, button)
                     if M.scriptOutputAssignments[i] then
                         -- Clear voltage on the physical output that was connected
                         M.currentOutputs[M.scriptOutputAssignments[i]] = 0
-                        print("Cleared output assignment for script output " ..
-                                  i)
                         M.scriptOutputAssignments[i] = nil
                         M.markMappingsChanged()
                     end
@@ -334,9 +321,6 @@ function M.mousepressed(x, y, button)
                         if changed then
                             M.markMappingsChanged() -- Mark as changed when reset
                         end
-
-                        print("Reset input " .. i ..
-                                  " to default state (bipolar, no attenuation)")
 
                         -- Remove any pending actions for this input
                         for j = #pendingClickActions, 1, -1 do
@@ -421,7 +405,6 @@ function M.mousemoved(x, y, dx, dy)
             if newBPM ~= M.clockBPM then
                 M.clockBPM = newBPM
                 M.markMappingsChanged() -- Mark as changed when BPM changes
-                print(string.format("Clock BPM adjusted to: %.1f", M.clockBPM))
             end
         else
             -- For normal inputs, adjust scaling as before
@@ -546,17 +529,8 @@ function M.mousemoved(x, y, dx, dy)
             local hitRadius = M.paramKnobRadius * M.uiScaleFactor
             if dx * dx + dy * dy <= hitRadius * hitRadius then
                 M.activeKnob = i
-
-                if prevActiveKnob ~= i then
-                    print("Mouse hovering over knob " .. i .. " (" .. sp.name ..
-                              ")")
-                end
                 break
             end
-        end
-
-        if prevActiveKnob and not M.activeKnob then
-            print("Mouse no longer hovering over any knob")
         end
     end
 
@@ -645,9 +619,6 @@ function M.mousereleased(x, y, button)
                         sp.baseValue = sp.current
                         -- Link the physical input to this parameter
                         M.parameterAutomation[i] = dragIndex
-                        print(string.format(
-                                  "Linked physical input %d to parameter %d (%s)",
-                                  dragIndex, i, sp.name))
                         break
                     end
                 end
@@ -662,8 +633,6 @@ function M.mousereleased(x, y, button)
                     if math.sqrt(dx * dx + dy * dy) <= 12 then
                         M.scriptInputAssignments[i] = dragIndex
                         M.markMappingsChanged()
-                        print("Connected physical input " .. dragIndex ..
-                                  " to script input " .. i)
                         break
                     end
                 end
@@ -678,8 +647,6 @@ function M.mousereleased(x, y, button)
                     if math.sqrt(dx * dx + dy * dy) <= 12 then
                         M.scriptOutputAssignments[i] = dragIndex
                         M.markMappingsChanged()
-                        print("Connected script output " .. i ..
-                                  " to physical output " .. dragIndex)
                         break
                     end
                 end
@@ -730,8 +697,6 @@ function M.wheelmoved(x, y)
             -- Use slightly larger hit radius for wheel events to make it more forgiving
             local hitRadius = M.paramKnobRadius * M.uiScaleFactor * 1.5
             if dx * dx + dy * dy <= hitRadius * hitRadius then
-                print("Found knob under cursor: " .. i .. " (" .. sp.name .. ")")
-
                 local step = 1
 
                 -- Adjust step size based on parameter type
@@ -739,39 +704,31 @@ function M.wheelmoved(x, y)
                     if sp.scale == kBy10 then
                         -- For kBy10, use step of 1.0 in display units
                         step = 1.0
-                        print("  Using kBy10 step: " .. step)
                     elseif sp.scale == kBy100 then
                         -- For kBy100, use step of 1.0 in display units
                         step = 1.0
-                        print("  Using kBy100 step: " .. step)
                     elseif sp.scale == kBy1000 then
                         -- For kBy1000, use step of 1.0 in display units
                         step = 1.0
-                        print("  Using kBy1000 step: " .. step)
                     else
                         step = 0.1 -- Default for float without scaling
-                        print("  Using default float step: " .. step)
                     end
                 else
-                    print("  Using default step: " .. step)
+                    step = 0.1 -- Default for integer and enum
                 end
 
                 -- y is positive for scroll up (increase) and negative for scroll down (decrease)
                 local newValue = sp.current + (y * step)
-                print("  New value (before clamping): " .. newValue)
 
                 -- Clamp the value within range based on parameter type
                 if sp.type == "enum" then
                     -- For enum parameters, clamp between 1 and the number of values
                     if sp.values then
                         newValue = math.max(1, math.min(#sp.values, newValue))
-                        print("  Clamped enum value: " .. newValue .. " (" ..
-                                  sp.values[math.floor(newValue)] .. ")")
                     end
                 else
                     -- For numeric parameters (integer, float), use min/max
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
-                    print("  Clamped numeric value: " .. newValue)
                 end
 
                 -- Only update if value actually changed
@@ -781,26 +738,17 @@ function M.wheelmoved(x, y)
                         local cvOffset = sp.current -
                                              (sp.baseValue or sp.current)
                         sp.baseValue = newValue - cvOffset
-                        print(
-                            "  Updated base value for automated parameter: " ..
-                                sp.baseValue)
                     end
                     sp.current = newValue
-                    print("  Set new value: " .. sp.current)
 
                     -- Update the script's parameters using the helper module
                     M.helpers.updateScriptParameters(M.scriptParameters,
                                                      M.script)
-                    print("  Updated script parameters")
                 end
 
                 return true
             end
         end
-
-        print("  No knob found under cursor")
-    else
-        print("  No script parameters available")
     end
 
     return false
@@ -825,6 +773,35 @@ function M.resetDragging()
     dragging = false
     dragType = nil
     dragIndex = nil
+end
+
+-- Function to cycle through input modes
+function M.cycleInputMode(inputIdx)
+    if not M.inputClock then return end
+
+    -- If currently not a clock input, make it a clock input
+    if not M.inputClock[inputIdx] then
+        M.inputClock[inputIdx] = true
+        M.inputPolarity[inputIdx] = kBipolar -- Reset polarity when making clock
+        M.inputScaling[inputIdx] = 1.0 -- Reset scaling when making clock
+        M.markMappingsChanged()
+        return
+    end
+
+    -- If currently a clock input, make it a unipolar CV input
+    if M.inputClock[inputIdx] and M.inputPolarity[inputIdx] == kBipolar then
+        M.inputClock[inputIdx] = false
+        M.inputPolarity[inputIdx] = kUnipolar
+        M.markMappingsChanged()
+        return
+    end
+
+    -- If currently a unipolar CV input, make it a bipolar CV input
+    if not M.inputClock[inputIdx] and M.inputPolarity[inputIdx] == kUnipolar then
+        M.inputPolarity[inputIdx] = kBipolar
+        M.markMappingsChanged()
+        return
+    end
 end
 
 return M

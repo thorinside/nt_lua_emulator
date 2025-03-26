@@ -183,13 +183,6 @@ function parameter_knobs.getKnobPosition(i, params)
     local knobX = startX + col * knobSpacing * uiScaleFactor
     local knobY = panelY * uiScaleFactor + row * rowSpacing + scaledKnobRadius
 
-    -- Debug output to help troubleshoot
-    if i <= 3 then -- Only print for first few knobs to avoid spam
-        print(string.format(
-                  "Knob %d position: (%.1f, %.1f), window width: %d, scale: %.1f",
-                  i, knobX, knobY, love.graphics.getWidth(), uiScaleFactor))
-    end
-
     return knobX, knobY
 end
 

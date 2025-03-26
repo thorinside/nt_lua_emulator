@@ -432,11 +432,7 @@ end
 function io_panel.getLastPhysicalIOBottomY() return lastPhysicalIOBottomY end
 
 -- Add function to set the last physical IO bottom Y position
-function io_panel.setLastPhysicalIOBottomY(y)
-    lastPhysicalIOBottomY = y
-    -- Print for debugging
-    print("Set lastPhysicalIOBottomY to " .. y)
-end
+function io_panel.setLastPhysicalIOBottomY(y) lastPhysicalIOBottomY = y end
 
 -- Add function to access the BPM for display
 function io_panel.drawClockBPM(x, y, bpm, font)
