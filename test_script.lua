@@ -152,6 +152,26 @@ return {
         drawText(0, 50, "4")
         drawText(0, 60, "5")
         drawText(0, 70, "6")
+
+        drawTinyText(0, 55,
+                     "0123456789-0123456789-0123456789-0123456789-0123456789-0123456789-0123456789-0123456789")
+        drawTinyText(60, 0, "1")
+        drawTinyText(60, 6, "2")
+        drawTinyText(60, 12, "3")
+        drawTinyText(60, 18, "4")
+        drawTinyText(60, 24, "5")
+        drawTinyText(60, 30, "6")
+        drawTinyText(60, 36, "7")
+        drawTinyText(60, 42, "8")
+        drawTinyText(60, 48, "9")
+        drawTinyText(60, 54, "0")
+        drawTinyText(60, 60, "1")
+        drawTinyText(60, 66, "2")
+        drawTinyText(60, 72, "3")
+        drawTinyText(60, 78, "4")
+        drawTinyText(60, 84, "5")
+        drawTinyText(60, 90, "6")
+
         return true
     end,
     serialise = function(self)
