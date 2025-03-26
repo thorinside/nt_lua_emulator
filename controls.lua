@@ -55,6 +55,21 @@ local controls = {
     {type = kButton, x = 0, y = 0, pushed = false, name = "button_4"}
 }
 
+-- Set pot positions based on values returned from setupUi
+function controls.setPotPositions(potValues)
+    if not potValues then return end
+
+    -- Set pot values for each available pot
+    for i = 1, 3 do
+        if potValues[i] ~= nil then
+            -- Clamp values to 0-1 range
+            controls[i].value = math.max(0, math.min(1, potValues[i]))
+            print(string.format("[Controls] Set %s position to %.2f",
+                                controls[i].name, controls[i].value))
+        end
+    end
+end
+
 -- Layout the controls based on the display area
 function controls.layout(displayX, displayY, displayWidth, displayHeight)
     local centerX = displayX + displayWidth / 2
@@ -390,6 +405,13 @@ function controls.setActive(active)
             control.lastY = nil
         end
     end
+end
+
+-- Get current pot values
+function controls.getPotValues()
+    local potValues = {}
+    for i = 1, 3 do potValues[i] = controls[i].value end
+    return potValues
 end
 
 return controls

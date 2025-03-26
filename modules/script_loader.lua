@@ -211,6 +211,18 @@ function M.loadScript(scriptPath, createDefaultMappings)
         end
     end
 
+    -- Call setupUi if available to sync pot positions
+    if newScript.setupUi then
+        local potPositions = safeScriptCall(newScript.setupUi, newScript)
+        if potPositions and type(potPositions) == "table" then
+            -- Pass pot positions to controls module
+            local controls = require("controls")
+            controls.setPotPositions(potPositions)
+            debug_utils.debugLog(
+                "Set pot positions from script's setupUi function")
+        end
+    end
+
     -- Add required fields to the script object
     newScript.parameterOffset = 1 -- Add parameterOffset field with value 1
 
