@@ -32,8 +32,8 @@ local font = nil
 
 -- Initialize the module
 function PathInputDialog.init()
-    -- Initialize font
-    font = love.graphics.newFont(14)
+    -- Initialize font using Gidole-Regular
+    font = love.graphics.newFont("fonts/Gidole-Regular.ttf", 14)
 end
 
 -- Open the dialog
@@ -498,7 +498,7 @@ function PathInputDialog.draw()
                 end
 
                 -- Show icon based on if it's a file or directory
-                local icon = completion.isDirectory and "📁 " or "📄 "
+                local icon = completion.isDirectory and "→ " or "• "
                 love.graphics.print(icon .. completion.displayName, x + 10,
                                     completionsY + (i - 1) * completionHeight +
                                         5)
@@ -530,7 +530,7 @@ function PathInputDialog.draw()
 
     -- Draw help text at the bottom
     love.graphics.setColor(0.7, 0.7, 0.7, 0.8) -- Light gray, semi-transparent
-    local helpFont = love.graphics.newFont(10)
+    local helpFont = love.graphics.newFont("fonts/Gidole-Regular.ttf", 10)
     love.graphics.setFont(helpFont)
     love.graphics.printf(
         "Tab: Complete | ↑↓: Navigate | Enter: Select | Esc: Cancel", x,
