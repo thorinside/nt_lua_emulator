@@ -1,6 +1,7 @@
 -- path_input_dialog.lua
 -- A simple path input dialog with tab completion
 local PathInputDialog = {}
+local json = require("lib.dkjson")
 
 -- State
 local isOpen = false
@@ -42,13 +43,17 @@ function PathInputDialog.open(onPathSelected)
     -- Store callback
     callback = onPathSelected
 
-    -- Get script directory from config to use as initial path
-    local config = require("config")
-    local cfg = config.load()
+    -- Get the current script path from state.json
+    local stateFile = io.open("state.json", "r")
     local initialPath = ""
-
-    -- Extract directory from existing script path if available
-    if cfg.script and cfg.script.path then initialPath = cfg.script.path end
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success and result.scriptPath then
+            initialPath = result.scriptPath
+        end
+    end
 
     -- Set the input text
     inputText = initialPath
