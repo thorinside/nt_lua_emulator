@@ -175,10 +175,7 @@ function M.checkScriptModified(time)
     if not enableAutoReload then return false end
 
     local modified = M.scriptLoader.checkScriptModified(scriptPath)
-
-    if modified then return true end
-
-    return false
+    return modified
 end
 
 -- Handle script reloading
