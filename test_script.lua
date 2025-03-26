@@ -136,7 +136,7 @@ return {
         drawSmoothBox(px - 1.0, py - 1.0, px + 1.0, py + 1.0, 15.0)
 
         if bing > 0.0 then
-            drawText(100, 30, "bing!")
+            drawText(200, 30, "bing!")
             bing = bing - 0.03
         end
 
