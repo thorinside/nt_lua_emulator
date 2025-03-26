@@ -45,16 +45,16 @@ return {
     name = 'bouncy',
     author = 'Expert Sleepers Ltd',
     init = function(self)
+        local state = self.state or {}
         return {
-            inputs = {kCV, kTrigger, kGate} -- or inputs = integer if all CVs
-            ,
+            inputs = {kCV, kTrigger, kGate},
             outputs = 2,
             parameters = {
-                {"Min X", -10, 10, -10, kVolts} -- min, max, default, unit
-                , {"Max X", -10, 10, 10, kVolts},
-                {"Min Y", -100, 100, -100, kVolts, kBy10} -- min, max, default, unit, scale
-                , {"Max Y", -100, 100, 100, kVolts, kBy10},
-                {"Edges", {"Bounce", "Warp"}, 1} -- enums, default
+                {"Min X", -10, 10, state.minX or -10, kVolts} -- min, max, default, unit
+                , {"Max X", -10, 10, state.maxX or 10, kVolts},
+                {"Min Y", -100, 100, state.minY or -100, kVolts, kBy10} -- min, max, default, unit, scale
+                , {"Max Y", -100, 100, state.maxY or 100, kVolts, kBy10},
+                {"Edges", {"Bounce", "Warp"}, state.edges or 1} -- enums, default
             }
         }
     end,
@@ -137,6 +137,14 @@ return {
         end
 
         drawText(100, 40, gateState and "Open" or "Closed")
+    end,
+    serialise = function(self)
+        local state = {}
+        state.minX = self.parameters[1]
+        state.maxX = self.parameters[2]
+        state.minY = self.parameters[3] * 10
+        state.maxY = self.parameters[4] * 10
+        state.edges = self.parameters[5]
+        return state
     end
-
 }

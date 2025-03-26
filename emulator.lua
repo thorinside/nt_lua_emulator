@@ -141,6 +141,12 @@ local function saveIOState(forceSave)
         }
     end
 
+    -- Save script state by calling serialise if it exists
+    if script and script.serialise then
+        local scriptState = scriptLoader.serialiseState(script)
+        if scriptState then state.scriptState = scriptState end
+    end
+
     ioState.saveIOState(state, forceSave)
 end
 

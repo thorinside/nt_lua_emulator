@@ -177,6 +177,22 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
     local newScriptParameters = {}
 
+    -- Load any saved script state from state.json and set it in the script object
+    local state = {}
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success and result then
+            state = result
+            -- Load saved script state into self.state before init is called
+            if state.scriptState then
+                newScript.state = state.scriptState
+            end
+        end
+    end
+
     if newScript.init then
         local initResult = safeScriptCall(newScript.init, newScript)
         if type(initResult) == "table" then
@@ -215,14 +231,6 @@ function M.loadScript(scriptPath, createDefaultMappings)
     end
 
     -- Save the script path to state.json
-    local state = {}
-    local stateFile = io.open("state.json", "r")
-    if stateFile then
-        local content = stateFile:read("*a")
-        stateFile:close()
-        local success, result = pcall(json.decode, content)
-        if success then state = result end
-    end
     state.scriptPath = scriptPath
     local stateFile = io.open("state.json", "w")
     if stateFile then
@@ -231,6 +239,55 @@ function M.loadScript(scriptPath, createDefaultMappings)
     end
 
     return newScript, newScriptParameters
+end
+
+-- Serialise script state by calling the script's serialise function
+function M.serialiseState(script)
+    if not script or not script.serialise then return nil end
+
+    -- Call the script's serialise function
+    local status, state = pcall(script.serialise, script)
+    if not status then
+        if showErrorNotification then
+            showErrorNotification("Error serialising script state: " ..
+                                      tostring(state))
+        end
+        return nil
+    end
+
+    return state
+end
+
+-- Save script state to state.json
+function M.saveScriptState(script)
+    if not script then return false end
+
+    -- Get script state through serialise function if it exists
+    local scriptState = M.serialiseState(script)
+    if not scriptState then return false end
+
+    -- Load existing state.json
+    local state = {}
+    local stateFile = io.open("state.json", "r")
+    if stateFile then
+        local content = stateFile:read("*a")
+        stateFile:close()
+        local success, result = pcall(json.decode, content)
+        if success then state = result end
+    end
+
+    -- Add script state to the state object
+    state.scriptState = scriptState
+
+    -- Write updated state back to file
+    local stateFile = io.open("state.json", "w")
+    if stateFile then
+        stateFile:write(json.encode(state, {indent = true}))
+        stateFile:close()
+        return true
+    end
+
+    return false
 end
 
 -- Check if a file has been modified
