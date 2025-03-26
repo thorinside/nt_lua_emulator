@@ -141,6 +141,12 @@ local function saveIOState(forceSave)
         }
     end
 
+    -- Save script state by calling serialise if it exists
+    if script and script.serialise then
+        local scriptState = scriptLoader.serialiseState(script)
+        if scriptState then state.scriptState = scriptState end
+    end
+
     ioState.saveIOState(state, forceSave)
 end
 
@@ -313,7 +319,8 @@ function M.load()
         helpers = helpers,
         notifications = notifications,
         markMappingsChanged = markMappingsChanged,
-        saveIOState = saveIOState
+        saveIOState = saveIOState,
+        signalProcessor = signalProcessor
     })
 
     -- Try to load script path from state.json first
@@ -663,29 +670,79 @@ function M.draw()
                 local prevFont = love.graphics.getFont()
                 love.graphics.setFont(smallFont)
                 local textWidth = smallFont:getWidth(bpmText)
+                local buttonWidth = 16
+                local buttonHeight = 16
+                local buttonPadding = 8
 
                 -- Get positions of inputs 9-12 (bottom row)
                 local inputPos = io_panel.getPhysicalInputPositions()
+                local centerX, textY
+
                 if inputPos and #inputPos >= 12 then
                     -- Calculate center between input 9 and input 12
                     local leftX = inputPos[9][1]
                     local rightX = inputPos[12][1]
-                    local centerX = (leftX + rightX) / 2 - textWidth / 2
+                    centerX = (leftX + rightX) / 2 - textWidth / 2
 
                     -- Calculate Y position with 16px gap under bottom row
                     local bottomY = inputPos[9][2] + 15 -- Radius of input circle
-                    local textY = bottomY + 16 -- 16px gap below the bottom of the circles
-
-                    love.graphics.print(bpmText, centerX, textY)
+                    textY = bottomY + 16 -- 16px gap below the bottom of the circles
                 else
                     -- Fallback if positions not available
                     local cellWidth = 40 -- Width of each input cell
                     local inputSectionWidth = 4 * cellWidth
                     local inputCenterX = 40 + (inputSectionWidth / 2) -- 40 is physInputX
-                    local centerX = inputCenterX - textWidth / 2
-                    love.graphics
-                        .print(bpmText, centerX, physicalIOBottomY + 16)
+                    centerX = inputCenterX - textWidth / 2
+                    textY = physicalIOBottomY + 16
                 end
+
+                -- Calculate button positions
+                local minusButtonX = centerX - buttonWidth - buttonPadding
+                local plusButtonX = centerX + textWidth + buttonPadding
+
+                -- Store BPM button positions for click detection
+                io_panel.setBPMButtonPositions({
+                    minus = {
+                        x = minusButtonX,
+                        y = textY - 2,
+                        width = buttonWidth,
+                        height = buttonHeight
+                    },
+                    plus = {
+                        x = plusButtonX,
+                        y = textY - 2,
+                        width = buttonWidth,
+                        height = buttonHeight
+                    }
+                })
+
+                -- Draw minus button
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.rectangle("fill", minusButtonX, textY - 2,
+                                        buttonWidth, buttonHeight, 3, 3)
+                love.graphics.setColor(0.2, 0.2, 0.2, 1.0)
+                love.graphics.setLineWidth(1.5)
+                love.graphics.line(minusButtonX + 3,
+                                   textY + buttonHeight / 2 - 2,
+                                   minusButtonX + buttonWidth - 3,
+                                   textY + buttonHeight / 2 - 2)
+
+                -- Draw BPM text
+                love.graphics.setColor(1, 1, 1, 0.5)
+                love.graphics.print(bpmText, centerX, textY)
+
+                -- Draw plus button
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.rectangle("fill", plusButtonX, textY - 2,
+                                        buttonWidth, buttonHeight, 3, 3)
+                love.graphics.setColor(0.2, 0.2, 0.2, 1.0)
+                love.graphics.line(plusButtonX + 3,
+                                   textY + buttonHeight / 2 - 2,
+                                   plusButtonX + buttonWidth - 3,
+                                   textY + buttonHeight / 2 - 2)
+                love.graphics.line(plusButtonX + buttonWidth / 2, textY + 3 - 2,
+                                   plusButtonX + buttonWidth / 2,
+                                   textY + buttonHeight - 3 - 2)
 
                 love.graphics.setFont(prevFont) -- Restore previous font
             end
