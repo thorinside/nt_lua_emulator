@@ -5,6 +5,7 @@ local scriptOutputPositions = {}
 local physicalInputPositions = {}
 local physicalOutputPositions = {}
 local lastPhysicalIOBottomY = 396 -- Initialize with a default value
+local bpmButtonPositions = {} -- Store BPM button positions
 
 local helpers = require("helpers")
 
@@ -433,6 +434,13 @@ function io_panel.getLastPhysicalIOBottomY() return lastPhysicalIOBottomY end
 
 -- Add function to set the last physical IO bottom Y position
 function io_panel.setLastPhysicalIOBottomY(y) lastPhysicalIOBottomY = y end
+
+-- Store BPM button positions for click detection
+function io_panel.setBPMButtonPositions(positions) bpmButtonPositions =
+    positions end
+
+-- Get BPM button positions for click detection
+function io_panel.getBPMButtonPositions() return bpmButtonPositions end
 
 -- Add function to access the BPM for display
 function io_panel.drawClockBPM(x, y, bpm, font)

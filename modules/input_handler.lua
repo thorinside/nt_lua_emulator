@@ -9,6 +9,13 @@ local dragIndex = nil
 local dragX, dragY = 0, 0
 local isDraggingInsideCircle = false
 
+-- BPM button holding state
+local bpmButtonHeld = nil -- "minus" or "plus" when a button is held
+local bpmHoldStartTime = 0
+local bpmRepeatDelay = 0.3 -- Initial delay before repeating (seconds)
+local bpmRepeatInterval = 0.08 -- How quickly to repeat adjustments (seconds)
+local bpmNextRepeatTime = 0
+
 local pendingPress = false
 local pendingType = nil
 local pendingIndex = nil
@@ -49,6 +56,7 @@ function M.init(deps)
     M.notifications = deps.notifications
     M.markMappingsChanged = deps.markMappingsChanged
     M.saveIOState = deps.saveIOState
+    M.signalProcessor = deps.signalProcessor
 
     -- Reset state
     dragging = false
@@ -99,6 +107,33 @@ end
 
 -- Update pending click actions (called during emulator's update loop)
 function M.updatePendingClicks(currentTime)
+    -- Handle BPM button holding
+    if bpmButtonHeld and currentTime > bpmHoldStartTime + bpmRepeatDelay and
+        currentTime >= bpmNextRepeatTime then
+        -- Time to repeat the BPM adjustment
+        local currentBPM = M.clockBPM
+        local newBPM = currentBPM
+
+        if bpmButtonHeld == "minus" then
+            newBPM = math.max(M.minBPM, currentBPM - 1)
+        elseif bpmButtonHeld == "plus" then
+            newBPM = math.min(M.maxBPM, currentBPM + 1)
+        end
+
+        -- Only update if BPM changed
+        if newBPM ~= currentBPM then
+            -- Call the signal processor to update BPM
+            if M.signalProcessor and M.signalProcessor.setClockBPM then
+                M.signalProcessor.setClockBPM(newBPM)
+            end
+            -- Save state when BPM changes
+            if M.saveIOState then M.saveIOState(true) end
+        end
+
+        -- Schedule next repeat
+        bpmNextRepeatTime = currentTime + bpmRepeatInterval
+    end
+
     local i = 1
     while i <= #pendingClickActions do
         local action = pendingClickActions[i]
@@ -151,6 +186,58 @@ function M.mousepressed(x, y, button)
     -- Check for double click
     if button == 1 and lastClickTime and (currentTime - lastClickTime) <
         doubleClickThreshold then isDoubleClick = true end
+
+    -- Check if BPM adjustment buttons were clicked
+    if button == 1 then
+        local bpmButtons = M.io_panel.getBPMButtonPositions()
+        if bpmButtons and bpmButtons.minus then
+            -- Check minus button
+            local btn = bpmButtons.minus
+            if lx >= btn.x and lx <= btn.x + btn.width and ly >= btn.y and ly <=
+                btn.y + btn.height then
+                -- Decrease BPM by 1
+                local currentBPM = M.clockBPM
+                local newBPM = math.max(M.minBPM, currentBPM - 1)
+                -- Call the signal processor to update BPM
+                if M.signalProcessor and M.signalProcessor.setClockBPM then
+                    M.signalProcessor.setClockBPM(newBPM)
+                end
+                -- Save state when BPM changes
+                if M.saveIOState then M.saveIOState(true) end
+
+                -- Set button held state for continuous adjustment
+                bpmButtonHeld = "minus"
+                bpmHoldStartTime = currentTime
+                bpmNextRepeatTime = currentTime + bpmRepeatDelay
+
+                return true
+            end
+        end
+
+        if bpmButtons and bpmButtons.plus then
+            -- Check plus button
+            local btn = bpmButtons.plus
+            if lx >= btn.x and lx <= btn.x + btn.width and ly >= btn.y and ly <=
+                btn.y + btn.height then
+                -- Increase BPM by 1
+                local currentBPM = M.clockBPM
+                local newBPM = math.min(M.maxBPM, currentBPM + 1)
+                -- Call the signal processor to update BPM
+                if M.signalProcessor and M.signalProcessor.setClockBPM then
+                    M.signalProcessor.setClockBPM(newBPM)
+                end
+                -- Save state when BPM changes
+                if M.saveIOState then M.saveIOState(true) end
+
+                -- Set button held state for continuous adjustment
+                bpmButtonHeld = "plus"
+                bpmHoldStartTime = currentTime
+                bpmNextRepeatTime = currentTime + bpmRepeatDelay
+
+                return true
+            end
+        end
+    end
 
     -- Check for right-click on physical inputs (for scaling)
     if button == 2 then
@@ -391,6 +478,17 @@ function M.mousemoved(x, y, dx, dy)
     local ldx = dx / M.uiScaleFactor
     local ldy = dy / M.uiScaleFactor
 
+    -- Check if mouse moved away from held BPM button
+    if bpmButtonHeld then
+        local bpmButtons = M.io_panel.getBPMButtonPositions()
+        if bpmButtons and bpmButtons[bpmButtonHeld] then
+            local btn = bpmButtons[bpmButtonHeld]
+            -- If mouse moved outside button bounds, clear held state
+            if lx < btn.x or lx > btn.x + btn.width or ly < btn.y or ly > btn.y +
+                btn.height then bpmButtonHeld = nil end
+        end
+    end
+
     -- Handle scaling inputs with vertical drag
     if scalingInput then
         local deltaY = scaleDragStartY - ly
@@ -545,6 +643,9 @@ function M.mousereleased(x, y, button)
 
     -- First check if controls handled the event
     if M.controls.mousereleased(lx, ly, button) then return true end
+
+    -- Clear BPM button held state
+    if button == 1 and bpmButtonHeld then bpmButtonHeld = nil end
 
     -- If we were scaling an input, stop now
     if scalingInput then
