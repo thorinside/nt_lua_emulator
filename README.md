@@ -34,7 +34,11 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 ### Installation
 1. Download [LÖVE](https://love2d.org/) (version 11.3 or higher)
 2. Download the Disting NT LUA Emulator
-3. Run the emulator using LÖVE:
+3. Add love to your path:
+   ```
+   export PATH="$PATH:/Applications/love.app/Contents/MacOS"
+   ```
+4. Run the emulator using LÖVE:
    ```
    love path/to/nt_lua_emulator
    ```
@@ -52,11 +56,13 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 3. Input/output connections are automatically saved between sessions
 
 #### Adjusting Input Modes
-1. Right-click on a physical input to cycle through modes (Bipolar → Clock → Unipolar)
+1. Left-click on a physical input to cycle through modes (Bipolar → Clock → Unipolar)
 2. Input modes are indicated by colored rings:
    - No ring: Bipolar (-5V to +5V)
    - Yellow ring: Clock (generates gate signals)
    - Red ring: Unipolar (0V to +10V)
+3. Double click an input to reset it to defaults.
+4. An input connected to a kTrigger script input will generate a trigger on Left-Click.
 
 #### Adjusting Parameters
 1. Use the parameter knobs in the parameter panel to adjust script parameters
@@ -75,17 +81,20 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 - **Arrow keys**: Navigate in file selection dialog
 - **Enter**: Confirm selection in dialogs
 - **Escape**: Cancel/close dialogs
+- **Ctrl-O**: Enable OSC
+- **Ctrl-D**: Enable Debug mode output
+- **Ctrl-S**: Save the state
 
 ## OSC Integration
 
 The emulator supports OSC (Open Sound Control) for external communication:
 
-1. Enable/disable OSC in the configuration
+1. Enable/disable OSC in the configuration or Ctrl-O to toggle.
 2. Default OSC settings:
    - Host: 127.0.0.1
    - Port: 8000
-   - Address: /dnt
-3. Output values are sent as individual floating-point messages
+   - Address: /ch
+3. Output values are sent as individual floating-point messages using the output channel numbers (/ch/1, /ch/2... bys for default)
 
 ## Developing Scripts
 
