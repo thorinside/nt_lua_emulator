@@ -205,11 +205,20 @@ function M.loadScript(scriptPath, createDefaultMappings)
             return nil
         end
 
-        local content = file:read("*a")
-        file:close()
+        -- Protect the file reading operation with pcall
+        local success, content = pcall(function()
+            local content = file:read("*a")
+            file:close()
+            return content
+        end)
+
+        if not success then
+            print("Error reading script file:", content) -- content will contain the error message
+            return nil
+        end
 
         -- Create a temporary chunk name for the script
-        local chunkName = "@" .. scriptPath:match("([^/]+)%.lua$")
+        local chunkName = "@" .. scriptPath:match("([^/]+)%.lua$") or "unknown"
 
         -- Load the script content
         local chunk, err = load(content, chunkName)
@@ -255,15 +264,20 @@ function M.loadScript(scriptPath, createDefaultMappings)
     local state = {}
     local stateFile = io.open("state.json", "r")
     if stateFile then
-        local content = stateFile:read("*a")
-        stateFile:close()
-        local success, result = pcall(json.decode, content)
-        if success and result then
-            state = result
-            -- Load saved script state into self.state before init is called
-            if state.scriptState then
-                newScript.state = state.scriptState
-            end
+        -- Protect the file reading operation with pcall
+        local readSuccess, content = pcall(function()
+            local content = stateFile:read("*a")
+            stateFile:close()
+            return content
+        end)
+
+        if readSuccess then
+            local success, result = pcall(json.decode, content)
+            if success then state = result end
+        else
+            print("Error reading state file:", content) -- content will contain the error message
+            -- Make sure the file is closed if there was an error
+            pcall(function() if stateFile then stateFile:close() end end)
         end
     end
 
@@ -359,10 +373,21 @@ function M.saveScriptState(script)
     local state = {}
     local stateFile = io.open("state.json", "r")
     if stateFile then
-        local content = stateFile:read("*a")
-        stateFile:close()
-        local success, result = pcall(json.decode, content)
-        if success then state = result end
+        -- Protect the file reading operation with pcall
+        local readSuccess, content = pcall(function()
+            local content = stateFile:read("*a")
+            stateFile:close()
+            return content
+        end)
+
+        if readSuccess then
+            local success, result = pcall(json.decode, content)
+            if success then state = result end
+        else
+            print("Error reading state file:", content) -- content will contain the error message
+            -- Make sure the file is closed if there was an error
+            pcall(function() if stateFile then stateFile:close() end end)
+        end
     end
 
     -- Add script state to the state object
@@ -371,9 +396,21 @@ function M.saveScriptState(script)
     -- Write updated state back to file
     local stateFile = io.open("state.json", "w")
     if stateFile then
-        stateFile:write(json.encode(state, {indent = true}))
-        stateFile:close()
-        return true
+        -- Protect the file writing operation with pcall
+        local writeSuccess, err = pcall(function()
+            stateFile:write(json.encode(state, {indent = true}))
+            stateFile:close()
+            return true
+        end)
+
+        if writeSuccess then
+            return true
+        else
+            print("Error writing state file:", err)
+            -- Make sure the file is closed if there was an error
+            pcall(function() if stateFile then stateFile:close() end end)
+            return false
+        end
     end
 
     return false
@@ -411,8 +448,21 @@ function M.checkScriptModified(path)
             -- Without LuaFileSystem, we'll check if we can open the file and read its contents
             local file = io.open(path, "r")
             if file then
-                local contents = file:read("*a")
-                file:close()
+                -- Protect the file reading operation with pcall
+                local readSuccess, contents = pcall(function()
+                    local contents = file:read("*a")
+                    file:close()
+                    return contents
+                end)
+
+                if not readSuccess then
+                    print("Error reading file for modification check:", contents)
+                    -- Make sure the file is closed if there was an error
+                    pcall(function()
+                        if file then file:close() end
+                    end)
+                    return false
+                end
 
                 -- Calculate a simple hash of the contents
                 local hash = 0
