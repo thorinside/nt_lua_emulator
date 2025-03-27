@@ -52,6 +52,14 @@ function M.getTime() return time end
 
 -- Set clock BPM
 function M.setClockBPM(bpm)
+    -- Handle nil, NaN, or non-numeric values
+    if bpm == nil or type(bpm) ~= "number" or bpm ~= bpm then -- bpm ~= bpm checks for NaN
+        -- Fall back to default BPM
+        clockBPM = 110
+        return clockBPM
+    end
+
+    -- Ensure BPM is within range
     clockBPM = math.max(minBPM, math.min(maxBPM, bpm))
     return clockBPM
 end
@@ -157,7 +165,9 @@ end
 -- Update input values
 function M.updateInputs(scriptInputAssignments, script)
     -- Process all 12 physical inputs
-    local period = 60 / clockBPM
+    -- Ensure clockBPM is never zero to prevent division by zero
+    local safeBPM = math.max(minBPM, clockBPM)
+    local period = 60 / safeBPM
     local halfPeriod = period / 2
 
     -- Determine which physical inputs are connected to script inputs and their types
