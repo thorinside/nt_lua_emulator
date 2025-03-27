@@ -329,7 +329,10 @@ end
 
 -- Serialise script state by calling the script's serialise function
 function M.serialiseState(script)
-    if not script or not script.serialise then return nil end
+    if not script then return nil end
+    if not script.serialise or type(script.serialise) ~= "function" then
+        return nil
+    end
 
     -- Call the script's serialise function
     local status, state = pcall(script.serialise, script)
