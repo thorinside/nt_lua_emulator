@@ -1,7 +1,7 @@
 -- osc_client.lua
-local osc = require("osc")
-local config = require("config")
-local debug_utils = require("debug_utils")
+local osc = require("modules.osc")
+local config = require("modules.config")
+local debug_utils = require("modules.debug_utils")
 
 -- This might be undefined if emulator.lua isn't loaded yet
 local emulator
@@ -28,7 +28,9 @@ local function debugLog(...) debug_utils.debugLog("[OSC]", ...) end
 -- Initialize the OSC client
 function osc_client.init()
     -- Try to load emulator for debug access
-    if not emulator then pcall(function() emulator = require("emulator") end) end
+    if not emulator then
+        pcall(function() emulator = require("modules.emulator") end)
+    end
 
     -- Enable OSC detailed debugging if emulator debug mode is on
     if isDebugMode() then

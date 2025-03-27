@@ -3,12 +3,12 @@
 local M = {}
 
 -- Required modules
-local helpers = require("helpers")
-local display = require("display")
-local osc_client = require("osc_client")
-local debug_utils = require("debug_utils")
+local helpers = require("modules.helpers")
+local display = require("modules.display")
+local osc_client = require("modules.osc_client")
+local debug_utils = require("modules.debug_utils")
 local json = require("lib.dkjson")
-local MinimalMode = require("minimal_mode")
+local MinimalMode = require("modules.minimal_mode")
 
 -- Local vars
 local scriptLastModified = 0
@@ -76,7 +76,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
         end
 
         -- Get the current input voltage from signal_processor
-        local signalProcessor = require("signal_processor")
+        local signalProcessor = require("modules.signal_processor")
         local currentInputs = signalProcessor.getCurrentInputs()
         return currentInputs[busIndex + 1] or 0.0 -- Convert zero-based to one-based index
     end
@@ -304,7 +304,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
         local potPositions = safeScriptCall(newScript.setupUi, newScript)
         if potPositions and type(potPositions) == "table" then
             -- Pass pot positions to controls module
-            local controls = require("controls")
+            local controls = require("modules.controls")
             controls.setPotPositions(potPositions)
             debug_utils.debugLog(
                 "Set pot positions from script's setupUi function")

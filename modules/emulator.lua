@@ -23,18 +23,18 @@ scriptLoader.init({
 })
 
 -- Required modules
-require("constants") -- These are global variables
+require("modules.constants") -- These are global variables
 -- Constants are now global: kGate, kTrigger, kCV, kBipolar, kUnipolar
-local display = require("display")
-local io_panel = require("io_panel")
-local controls = require("controls")
-local parameter_knobs = require("parameter_knobs")
-local helpers = require("helpers")
-local osc_client = require("osc_client")
-local config = require("config")
-local MinimalMode = require("minimal_mode") -- Add minimal mode module
+local display = require("modules.display")
+local io_panel = require("modules.io_panel")
+local controls = require("modules.controls")
+local parameter_knobs = require("modules.parameter_knobs")
+local helpers = require("modules.helpers")
+local osc_client = require("modules.osc_client")
+local config = require("modules.config")
+local MinimalMode = require("modules.minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
-local debug_utils = require("debug_utils")
+local debug_utils = require("modules.debug_utils")
 
 --------------------------------------------------------------------------------
 -- Configuration

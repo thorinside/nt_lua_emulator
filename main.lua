@@ -1,6 +1,6 @@
 -- main.lua
-local emulator = require("emulator")
-local PathInputDialog = require("path_input_dialog")
+local emulator = require("modules.emulator")
+local PathInputDialog = require("modules.path_input_dialog")
 
 function love.load()
     -- Initialize everything

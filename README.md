@@ -1,63 +1,134 @@
-# CLAUDE.md - LUA Dev Reference
+# Disting NT LUA Emulator
 
-## Runtime Environment
-- Engine: LÖVE framework (2D game framework)
-- Run scripts: `love .` (from project root)
-- Test a specific script: `love . test_script.lua`
+A comprehensive emulator for developing and testing Lua scripts for the Expert Sleepers Disting NT Eurorack module. This application provides a virtual environment that simulates the behavior of the physical hardware, allowing you to develop and test your scripts without the need for physical hardware.
 
-## Hot-Reload Features
-- Auto-reload: Enabled by default, watches for changes in test_script.lua
-- Keyboard shortcuts:
-  - `Ctrl+R`: Force reload script
-  - `Ctrl+H`: Toggle hot reload on/off
-  - `Ctrl+O`: Toggle OSC on/off  
-  - `Ctrl+D`: Toggle debug mode
-  - `Ctrl+S`: Manually save I/O mappings to state.json
-  - `Alt+F4` or `Cmd+Q`: Quit application
+## Features
 
-## State Management
-- I/O connections are automatically saved to `state.json` when changed
-- Input modes (gate/clock, unipolar, bipolar) and scaling are also saved
-- OSC connection state (enabled/disabled) is preserved between sessions
-- When starting with the same script, connections and input settings are restored
-- If no saved state exists, default mappings are created (1:1 connections)
-- Debug messages show when state is saved or loaded
-- Use `Ctrl+S` to manually save state
+### Core Functionality
+- **Script Execution**: Load and run Lua scripts designed for the Disting NT
+- **Simulated Display**: Full emulation of the 256x64 OLED/LCD screen
+- **Input/Output Simulation**: 12 virtual inputs and 8 virtual outputs
+- **Parameter Controls**: Virtual knobs, buttons, and encoders
+- **State Saving**: Automatic preservation of your setup between sessions
+- **OSC Integration**: Send and receive OSC messages for external control
+- **Real-time Clock**: Built-in clock generator with adjustable BPM
 
-## Input Types
-- `kGate`: Gate inputs receive clock signals and trigger gate function on rising/falling edges
-- `kTrigger`: Trigger inputs respond to user clicks, firing the trigger function once
-- `kCV`: CV inputs pass continuous values to the script's step function
+### Input/Output Management
+- **I/O Mapping**: Drag-and-drop interface for connecting script I/O to physical I/O
+- **Multiple Input Modes**:
+  - Bipolar (-5V to +5V)
+  - Unipolar (0V to +10V)
+  - Clock (generates gate signals based on BPM)
+- **Input Scaling**: Adjust the scaling of each input independently
+- **Signal Visualization**: Real-time visualization of signal values with voltage-based coloring
 
-## Parameter Automation
-- Drag a physical input to a parameter knob to connect them
-- The input's value (0-10V) will control the parameter value
-- Connected parameters show blue rings and "CV#" indicator
-- Double-click on a parameter knob to remove automation
+### User Interface
+- **Minimal Mode**: Streamlined interface showing only the display
+- **Full Mode**: Complete interface with I/O panels and parameter controls
+- **I/O Panel**: Visual representation of script inputs/outputs and physical connections
+- **Parameter Controls**: Interactive knobs for adjusting script parameters
+- **Control Panel**: Virtual buttons, encoders, and potentiometers
 
-## Connections
-- Double-click on script inputs/outputs to clear their connections
-- Right-click on physical inputs to toggle clock mode
-- Use drag and drop to create connections
+## Getting Started
 
-## Code Style Guidelines
-- **Naming**: snake_case for variables, functions, modules (e.g., `local my_variable`, `function do_stuff()`)
-- **Modules**: Each file should return a single table or function
-- **Indentation**: 4 spaces (no tabs)
-- **Comments**: Use `--` for single-line comments, `--[[...]]` for multi-line
-- **Imports**: Use `require("module_name")` (no file extension)
-- **Constants**: Define in uppercase with underscores (e.g., `MY_CONSTANT`)
-- **Errors**: Use Lua's `error()` function for exceptional cases
+### Installation
+1. Download [LÖVE](https://love2d.org/) (version 11.3 or higher)
+2. Download the Disting NT LUA Emulator
+3. Run the emulator using LÖVE:
+   ```
+   love path/to/nt_lua_emulator
+   ```
 
-## Project Structure
-- `main.lua`: Entry point, LÖVE lifecycle hooks
-- `emulator.lua`: Core simulation environment
-- `constants.lua`: Shared constants
-- `helpers.lua`: Utility functions
-- `test_script.lua`: Example script (modify or create new ones)
+### Loading a Script
+1. Press **F2** to open the script selection dialog
+2. Navigate to your script file (.lua)
+3. Select the script and click "Open" or press Enter
 
-## Best Practices
-- Use local variables whenever possible
-- Add detailed comments for complex algorithms
-- Use explicit `nil` checks instead of truthiness (`if x ~= nil then`)
-- Prefer table constructors over repetitive assignments
+### Basic Usage
+
+#### Input/Output Mapping
+1. Click and drag from a script input/output to a physical input/output to create a connection
+2. Click on an existing connection to remove it
+3. Input/output connections are automatically saved between sessions
+
+#### Adjusting Input Modes
+1. Right-click on a physical input to cycle through modes (Bipolar → Clock → Unipolar)
+2. Input modes are indicated by colored rings:
+   - No ring: Bipolar (-5V to +5V)
+   - Yellow ring: Clock (generates gate signals)
+   - Red ring: Unipolar (0V to +10V)
+
+#### Adjusting Parameters
+1. Use the parameter knobs in the parameter panel to adjust script parameters
+2. Parameters with different types (integer, float, enum) are handled automatically
+3. Parameter values are automatically saved with your script state
+
+#### Using Controls
+1. The controls panel provides virtual buttons, encoders, and potentiometers
+2. These controls interact with the script's corresponding callback functions
+3. Control states are visualized in real-time
+
+## Keyboard Shortcuts
+
+- **F2**: Open script selection dialog
+- **Alt+F4** / **Cmd+Q**: Quit the application
+- **Arrow keys**: Navigate in file selection dialog
+- **Enter**: Confirm selection in dialogs
+- **Escape**: Cancel/close dialogs
+
+## OSC Integration
+
+The emulator supports OSC (Open Sound Control) for external communication:
+
+1. Enable/disable OSC in the configuration
+2. Default OSC settings:
+   - Host: 127.0.0.1
+   - Port: 8000
+   - Address: /dnt
+3. Output values are sent as individual floating-point messages
+
+## Developing Scripts
+
+When writing scripts for the Disting NT:
+
+1. Scripts should return a table with the following elements:
+   - `process`: Main processing function called each frame
+   - `inputs`: Table defining input types (kCV, kGate, kTrigger)
+   - `outputs`: Table defining output types (kCV, kGate)
+   - `init`: Initialization function (optional)
+   - `gate`: Gate input handler (optional)
+
+2. Available callback functions:
+   - `button`: Handle button presses
+   - `pot1Turn`, `pot2Turn`, `pot3Turn`: Handle potentiometer turns
+   - `pot1Push`, `pot2Push`, `pot3Push`: Handle potentiometer pushes
+   - `pot1Release`, `pot2Release`, `pot3Release`: Handle potentiometer releases
+   - `encoder1Turn`, `encoder2Turn`: Handle encoder turns
+   - `encoder1Push`, `encoder2Push`: Handle encoder pushes
+   - `serialise`: Save script state
+
+3. Drawing functions for the display:
+   - `drawRectangle`, `drawBox`, `drawSmoothBox`
+   - `drawLine`, `drawSmoothLine`
+   - `drawText`, `drawTinyText`
+   - `fillRectangle`
+   - `drawCircle`, `fillCircle`
+
+## Configuration
+
+Settings are stored in `config.json` and include:
+
+- OSC settings (host, port, enabled status)
+- Window position and size
+- UI mode (minimal or full)
+- Active overlay (controls or I/O)
+
+## Troubleshooting
+
+- **Script Errors**: Error messages are displayed on screen and in the console
+- **OSC Connectivity**: Check your firewall settings if OSC isn't working
+- **Performance Issues**: Reduce the update rate in complex scripts
+
+---
+
+The Disting NT LUA Emulator is an open-source project designed to help developers create and test scripts for the Expert Sleepers Disting NT Eurorack module. It is not affiliated with Expert Sleepers.

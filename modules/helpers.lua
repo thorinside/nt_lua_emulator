@@ -1,6 +1,6 @@
 -- helpers.lua
 local helpers = {}
-local debug_utils = require("debug_utils")
+local debug_utils = require("modules.debug_utils")
 
 function helpers.voltageToColor(v)
     if v < 0 then

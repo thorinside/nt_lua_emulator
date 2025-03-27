@@ -7,7 +7,7 @@ local physicalOutputPositions = {}
 local lastPhysicalIOBottomY = 396 -- Initialize with a default value
 local bpmButtonPositions = {} -- Store BPM button positions
 
-local helpers = require("helpers")
+local helpers = require("modules.helpers")
 
 -- Helper function to wrap and ellipsize text
 local function wrapAndEllipsizeText(text, font, maxWidth, maxLines)
