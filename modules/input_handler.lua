@@ -307,6 +307,7 @@ function M.mousepressed(x, y, button)
                 -- Start knob drag for normal click
                 if button == 1 then
                     knobDragIndex = i
+                    -- We still need to track the knob for double-click reset functionality
                     knobDragStartY = ly
                     knobDragStartVal = sp.current
                     dragX = lx -- Initialize horizontal drag position
@@ -544,63 +545,12 @@ function M.mousemoved(x, y, dx, dy)
 
     -- Handle parameter knob dragging
     if knobDragIndex then
-        local sp = M.scriptParameters[knobDragIndex]
-        if sp then
-            -- Handle dragging differently based on automation
-            local isAutomated = M.parameterAutomation[knobDragIndex] ~= nil
-
-            if sp.type == "integer" then
-                -- Integer parameters always use whole number steps
-                local stepSize = dy > 0 and -1 or 1
-
-                if isAutomated then
-                    local newBaseVal = (sp.baseValue or sp.current) + stepSize
-                    newBaseVal = math.floor(
-                                     math.max(sp.min,
-                                              math.min(sp.max, newBaseVal)) +
-                                         0.5)
-                    sp.baseValue = newBaseVal
-                else
-                    local newVal = sp.current + stepSize
-                    newVal = math.floor(math.max(sp.min,
-                                                 math.min(sp.max, newVal)) + 0.5)
-                    sp.current = newVal
-                end
-
-            elseif sp.type == "float" then
-                -- Float parameters use scaled values
-                local range = sp.max - sp.min
-                local stepSize = -dy * (range / 200) -- Adjust sensitivity based on parameter range
-
-                if isAutomated then
-                    local newBaseVal = (sp.baseValue or sp.current) + stepSize
-                    newBaseVal = math.max(sp.min, math.min(sp.max, newBaseVal))
-                    sp.baseValue = newBaseVal
-                else
-                    local newVal = sp.current + stepSize
-                    newVal = math.max(sp.min, math.min(sp.max, newVal))
-                    sp.current = newVal
-                end
-
-            else -- enum type
-                -- Enum parameters always use whole number indices
-                local intDelta = dy > 0 and -1 or 1 -- Flip direction for more intuitive control
-
-                if isAutomated then
-                    local newBaseIndex = (sp.baseValue or sp.current) + intDelta
-                    newBaseIndex = math.max(1,
-                                            math.min(#sp.values, newBaseIndex))
-                    sp.baseValue = newBaseIndex
-                else
-                    local newIndex = sp.current + intDelta
-                    newIndex = math.max(1, math.min(#sp.values, newIndex))
-                    sp.current = newIndex
-                end
-            end
-
-            -- Update the script's parameters immediately
-            M.helpers.updateScriptParameters(M.scriptParameters, M.script)
-        end
+        -- Disable mouse dragging behavior for parameter knobs
+        -- Just continue to track the knob for mouse release but don't adjust values
+        -- Values will only be changed using mouse wheel now
+        
+        -- Update the script's parameters immediately
+        M.helpers.updateScriptParameters(M.scriptParameters, M.script)
     end
 
     -- Update active knob for wheel control
@@ -806,33 +756,126 @@ function M.wheelmoved(x, y)
                 -- Adjust step size based on parameter type
                 if sp.type == "float" then
                     if sp.scale == kBy10 then
-                        -- For kBy10, use step of 1.0 in display units
-                        step = 1.0
+                        -- For kBy10, use step of 1.0 in display units (10 in raw values)
+                        step = 10.0
+                        -- Apply the step in the appropriate direction
+                        newValue = sp.current + (y > 0 and step or -step)
+                        -- Hold SHIFT key to make more precise adjustments
+                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                            newValue = sp.current + (y > 0 and 1.0 or -1.0) -- Smaller step for fine control
+                        end
+                        -- Clamp between min and max
+                        newValue = math.max(sp.min, math.min(sp.max, newValue))
                     elseif sp.scale == kBy100 then
-                        -- For kBy100, use step of 1.0 in display units
-                        step = 1.0
+                        -- For kBy100, use step of 1.0 in display units (100 in raw values)
+                        step = 100.0
+                        -- Apply the step in the appropriate direction
+                        newValue = sp.current + (y > 0 and step or -step)
+                        -- Hold SHIFT key to make more precise adjustments
+                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                            newValue = sp.current + (y > 0 and 10.0 or -10.0) -- Smaller step for fine control
+                        end
+                        -- Clamp between min and max
+                        newValue = math.max(sp.min, math.min(sp.max, newValue))
                     elseif sp.scale == kBy1000 then
-                        -- For kBy1000, use step of 1.0 in display units
-                        step = 1.0
+                        -- For kBy1000, use step of 1.0 in display units (1000 in raw values)
+                        step = 1000.0
+                        -- Apply the step in the appropriate direction
+                        newValue = sp.current + (y > 0 and step or -step)
+                        -- Hold SHIFT key to make more precise adjustments
+                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                            newValue = sp.current + (y > 0 and 100.0 or -100.0) -- Smaller step for fine control
+                        end
+                        -- Clamp between min and max
+                        newValue = math.max(sp.min, math.min(sp.max, newValue))
                     else
-                        step = 0.1 -- Default for float without scaling
+                        -- For default float parameters, use a normalized continuous approach
+                        local range = sp.max - sp.min
+                        
+                        -- Calculate movement factor based on range
+                        -- For larger ranges, use smaller movements per wheel step
+                        local movementFactor = math.max(0.005, 0.1 / range)
+                        
+                        -- Get current normalized position (0.0 to 1.0)
+                        local currentNormalized = (sp.current - sp.min) / range
+                        
+                        -- Apply the wheel movement
+                        currentNormalized = currentNormalized + (y * movementFactor)
+                        
+                        -- Clamp the normalized value
+                        currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
+                        
+                        -- Convert back to actual value
+                        newValue = sp.min + (currentNormalized * range)
+                        
+                        -- Hold SHIFT key for more precise control
+                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                            -- Much finer control with shift
+                            newValue = sp.current + (y > 0 and 0.05 or -0.05)
+                        end
+                        
+                        -- Clamp to parameter range
+                        newValue = math.max(sp.min, math.min(sp.max, newValue))
                     end
-                else
-                    step = 0.1 -- Default for integer and enum
-                end
-
-                -- y is positive for scroll up (increase) and negative for scroll down (decrease)
-                local newValue = sp.current + (y * step)
-
-                -- Clamp the value within range based on parameter type
-                if sp.type == "enum" then
-                    -- For enum parameters, clamp between 1 and the number of values
-                    if sp.values then
-                        newValue = math.max(1, math.min(#sp.values, newValue))
+                elseif sp.type == "integer" then
+                    -- For integer parameters, use a normalized continuous approach like enums
+                    local range = sp.max - sp.min
+                    
+                    -- Calculate movement factor based on range
+                    -- For larger ranges, use smaller movements per wheel step
+                    local movementFactor = math.max(0.005, 0.1 / range)
+                    
+                    -- Get current normalized position (0.0 to 1.0)
+                    local currentNormalized = (sp.current - sp.min) / range
+                    
+                    -- Apply the wheel movement
+                    currentNormalized = currentNormalized + (y * movementFactor)
+                    
+                    -- Clamp the normalized value
+                    currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
+                    
+                    -- Convert back to actual value
+                    -- Don't round - allow smooth continuous movement between values
+                    newValue = sp.min + (currentNormalized * range)
+                    
+                    -- Hold SHIFT key for more precise control
+                    if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                        -- Much finer control with shift
+                        newValue = sp.current + (y > 0 and 0.2 or -0.2)
                     end
-                else
-                    -- For numeric parameters (integer, float), use min/max
+                    
+                    -- Clamp to parameter range
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
+                elseif sp.type == "enum" then
+                    -- For enum parameters, use a normalized approach with continuous movement
+                    if sp.values then
+                        local totalValues = #sp.values
+                        
+                        -- Calculate how much to move based on wheel delta and enum count
+                        -- More items = smaller movements per step, fewer items = larger movements
+                        local movementFactor = math.max(0.05, 0.15 / totalValues) -- Adjusted based on number of options
+                        
+                        -- Get the current position as a normalized value (0.0 to 1.0)
+                        -- Subtract 1 because enum indices start at 1 in Lua
+                        local currentNormalized = (sp.current - 1) / (totalValues - 1)
+                        
+                        -- Apply the wheel movement as a normalized adjustment
+                        -- The y value is flipped for intuitive direction (up = increase)
+                        currentNormalized = currentNormalized + (y * movementFactor)
+                        
+                        -- Clamp the normalized value between 0.0 and 1.0
+                        currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
+                        
+                        -- Convert back to an enum index (1 to #values)
+                        newValue = math.floor(currentNormalized * (totalValues - 1) + 1.5)
+                        
+                        -- Ensure we're in valid range
+                        newValue = math.max(1, math.min(totalValues, newValue))
+                    else
+                        -- Fallback for enums without values array
+                        newValue = sp.current + (y > 0 and 1 or -1)
+                        newValue = math.max(1, math.min(sp.max or 1, newValue))
+                    end
                 end
 
                 -- Only update if value actually changed

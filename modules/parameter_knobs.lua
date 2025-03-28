@@ -78,16 +78,36 @@ function parameter_knobs.draw(params)
                                displayX + pointerLen * math.cos(angle),
                                displayY + pointerLen * math.sin(angle))
         else
-            -- For enum parameters, use discrete positions
+            -- For enum parameters, use a continuous visualization 
+            -- that matches the wheel behavior
             if sp.values then
                 local count = #sp.values
-                local sliceAngle = (2 * math.pi) / count
-                local angle = -math.pi / 2 + (sp.current - 1) * sliceAngle
+                -- Calculate normalized position (0.0 to 1.0)
+                local normalized = (sp.current - 1) / math.max(1, count - 1)
+                -- Map to full rotation range
+                local angle = -math.pi / 2 + normalized * 2 * math.pi
+                
                 love.graphics.setColor(1, 1, 0)
                 local pointerLen = scaledKnobRadius - 2
                 love.graphics.line(displayX, displayY,
-                                   displayX + pointerLen * math.cos(angle),
-                                   displayY + pointerLen * math.sin(angle))
+                                  displayX + pointerLen * math.cos(angle),
+                                  displayY + pointerLen * math.sin(angle))
+                
+                -- Draw small indicators for each enum position
+                love.graphics.setColor(0.6, 0.6, 0.6, 0.7)
+                for i = 1, count do
+                    local pos = (i - 1) / math.max(1, count - 1)
+                    local markAngle = -math.pi / 2 + pos * 2 * math.pi
+                    local innerRadius = scaledKnobRadius - 5
+                    local outerRadius = scaledKnobRadius - 2
+                    
+                    love.graphics.line(
+                        displayX + innerRadius * math.cos(markAngle),
+                        displayY + innerRadius * math.sin(markAngle),
+                        displayX + outerRadius * math.cos(markAngle),
+                        displayY + outerRadius * math.sin(markAngle)
+                    )
+                end
             else
                 -- Fallback for enum without values
                 love.graphics.setColor(1, 0, 0) -- Red to indicate error
