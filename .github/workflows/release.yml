@@ -19,28 +19,26 @@ jobs:
 
       - name: Generate Release Notes
         id: release-notes
-        uses: TriPSs/conventional-changelog-action@v3
+        uses: release-drafter/release-drafter@v5
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          git-message: 'chore(release): {version}'
-          git-user-name: 'GitHub Actions'
-          git-user-email: 'actions@github.com'
-          skip-commit: 'true'
-          skip-version-file: 'true'
-          skip-on-empty: 'false'
-          output-file: 'false'
+          config-name: release-drafter.yml
+          disable-autolabeler: true
+          name: ${{ github.ref_name }}
+          tag: ${{ github.ref_name }}
+          version: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create ZIP archive
         run: |
           zip -r nt_lua_emulator.zip . -x ".git/*" ".github/*" ".DS_Store"
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: nt_lua_emulator.zip
-          name: Release ${{ github.ref_name }}
-          body: ${{ steps.release-notes.outputs.clean_changelog }}
-          draft: false
-          prerelease: false
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.release-notes.outputs.upload_url }}
+          asset_path: ./nt_lua_emulator.zip
+          asset_name: nt_lua_emulator.zip
+          asset_content_type: application/zip 
