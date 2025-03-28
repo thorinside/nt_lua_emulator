@@ -400,6 +400,11 @@ function M.load()
         -- Now resize the window with complete information
         local width, height = windowManager.resizeWindow()
     end
+
+    -- Force a recalculation of the layout
+    windowManager.invalidateCache()
+
+    return M
 end
 
 function M.update(dt)
@@ -751,7 +756,7 @@ function M.draw()
             parameter_knobs.draw({
                 scriptParameters = parameterManager.getParameters(),
                 displayWidth = display.getConfig().width,
-                panelY = physicalIOBottomY + 24, -- Position 24px below physical I/O section
+                panelY = physicalIOBottomY + 60, -- Increased from 50 to 60 to provide more spacing
                 knobRadius = 12,
                 knobSpacing = 80,
                 parameterAutomation = parameterManager.getParameterAutomation(),

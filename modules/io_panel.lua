@@ -109,7 +109,7 @@ function io_panel.drawScriptIO(params)
 
     -- Layout configuration
     local circleRadius = 10
-    local itemsPerColumn = 4
+    local itemsPerColumn = 6
     local rowHeight = 28 -- Reduced from 40 to create tighter spacing
     local circleTextSpacing = 12
     local columnWidth = 200 -- Width of each main column
@@ -408,7 +408,7 @@ function io_panel.getScriptIOHeight(params)
     local outputCount = params.outputCount or 0
     local titleHeight = 33 -- Space for title (matches drawScriptIO)
     local rowHeight = 28 -- Matches drawScriptIO
-    local itemsPerColumn = 4 -- Matches drawScriptIO
+    local itemsPerColumn = 6 -- Changed from 4 to 6
 
     -- Calculate number of rows needed for inputs and outputs
     local inputRows = math.ceil(inputCount / itemsPerColumn)
