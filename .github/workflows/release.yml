@@ -17,15 +17,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate Release Notes
-        id: release-notes
-        uses: release-drafter/release-drafter@v5
+      - name: Build changelog
+        id: github_release
+        uses: mikepenz/release-changelog-builder-action@v3
         with:
-          config-name: release-drafter.yml
-          disable-autolabeler: true
-          name: ${{ github.ref_name }}
-          tag: ${{ github.ref_name }}
-          version: ${{ github.ref_name }}
+          configuration: ".github/release-drafter.yml"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -33,12 +29,13 @@ jobs:
         run: |
           zip -r nt_lua_emulator.zip . -x ".git/*" ".github/*" ".DS_Store"
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
-          upload_url: ${{ steps.release-notes.outputs.upload_url }}
-          asset_path: ./nt_lua_emulator.zip
-          asset_name: nt_lua_emulator.zip
-          asset_content_type: application/zip 
+          files: nt_lua_emulator.zip
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.github_release.outputs.changelog }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
