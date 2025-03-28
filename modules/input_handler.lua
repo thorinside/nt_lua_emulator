@@ -265,7 +265,7 @@ function M.mousepressed(x, y, button)
         local params = {
             scriptParameters = M.scriptParameters,
             displayWidth = M.display.getConfig().width,
-            panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
+            panelY = M.lastPhysicalIOBottomY + 60, -- Changed from 24 to 60 to match drawing position
             knobRadius = M.paramKnobRadius,
             knobSpacing = M.paramKnobSpacing,
             uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
@@ -608,7 +608,7 @@ function M.mousemoved(x, y, dx, dy)
         local params = {
             scriptParameters = M.scriptParameters,
             displayWidth = M.display.getConfig().width,
-            panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
+            panelY = M.lastPhysicalIOBottomY + 60, -- Changed from 24 to 60 to match drawing position
             knobRadius = M.paramKnobRadius,
             knobSpacing = M.paramKnobSpacing,
             uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
@@ -702,7 +702,7 @@ function M.mousereleased(x, y, button)
                 local params = {
                     scriptParameters = M.scriptParameters,
                     displayWidth = M.display.getConfig().width,
-                    panelY = M.lastPhysicalIOBottomY + 24,
+                    panelY = M.lastPhysicalIOBottomY + 60, -- Changed from 24 to 60 to match drawing position
                     knobRadius = M.paramKnobRadius,
                     knobSpacing = M.paramKnobSpacing,
                     uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
@@ -784,7 +784,7 @@ function M.wheelmoved(x, y)
         local params = {
             scriptParameters = M.scriptParameters,
             displayWidth = M.display.getConfig().width,
-            panelY = M.lastPhysicalIOBottomY + 24, -- Use the stored Y position
+            panelY = M.lastPhysicalIOBottomY + 60, -- Changed from 24 to 60 to match drawing position
             knobRadius = M.paramKnobRadius,
             knobSpacing = M.paramKnobSpacing,
             uiScaleFactor = M.uiScaleFactor -- Add UI scale factor
