@@ -1,0 +1,226 @@
+-- My Algorithm Name
+--[[
+  A brief description of what this algorithm does.
+
+  You can use multi-line comments like this for longer descriptions,
+  including usage notes or help text for controls if needed.
+
+  Example Help:
+  - Input 1: CV control for pitch (V/Oct)
+  - Input 2: Trigger input to fire envelope
+  - Pot 1: Controls Decay Time
+--]]
+
+-- Optional: Local variables specific to this script instance
+-- local myStateVariable = 0
+-- local myTable = {}
+
+-- The main table returned by the script
+return {
+  -- == Required Metadata ==
+  name = "MyAlgoName", -- Short name, often matches the first comment line
+  author = "Your Name", -- Your name or alias
+
+  -- == Initialization Function (Called once on script load) ==
+  init = function(self)
+    print(self.name .. ": init called") -- Use self.name for consistency
+
+    -- Access state loaded from preset (if serialise is used)
+    if self.state then
+      print(self.name .. ": Found saved state")
+      -- TODO: Process self.state data if necessary
+      -- Example: myStateVariable = self.state.mySavedValue or 0
+    end
+
+    -- Define Inputs, Outputs, and Parameters
+    return {
+      -- == Inputs ==
+      -- Specify the number of inputs, or a table defining types for each input
+      inputs = 1, -- Example: One CV input
+      -- inputs = { kCV, kTrigger, kGate }, -- Example: CV, Trigger, Gate inputs
+      -- inputNames = { [1] = "Pitch CV", [2] = "Trig In", [3] = "Gate In" }, -- Optional: Custom names
+
+      -- == Outputs ==
+      -- Specify the number of outputs, or a table defining types (kStepped or kLinear)
+      outputs = 1, -- Example: One stepped output (default)
+      -- outputs = { kStepped, kLinear }, -- Example: One stepped, one linear output
+      -- outputNames = { "Main Out", "Aux Out" }, -- Optional: Custom names
+
+      -- == Parameters ==
+      -- Define script-specific parameters (optional)
+      parameters = {
+        -- Format 1: Integer parameter
+        { "Param 1 Int", -10, 10, 0, kVolts }, -- Name, Min, Max, Default, Unit
+
+        -- Format 2: Float parameter (using scale)
+        { "Param 2 Float", 0, 1000, 100, kMs, kBy10 }, -- Name, Min, Max, Default, Unit, Scale (kBy10, kBy100, kBy1000) -> 0.0ms to 100.0ms, default 10.0ms
+
+        -- Format 3: Enum parameter
+        { "Param 3 Enum", { "Option A", "Option B", "Option C" }, 1 } -- Name, {Enum Values Table}, Default Index (1-based)
+      },
+    }
+  end,
+
+  -- == Processing Function (Called every ~1ms if defined) ==
+  -- Use step for continuous processing based on time and CV inputs
+  --[[ -- Uncomment this block if you need step processing --
+  step = function(self, dt, inputs)
+    -- dt: Time elapsed since last step call (in seconds)
+    -- inputs: Table of current input voltages (1-based index)
+
+    -- Access parameter values (read-only access recommended here)
+    -- Note: Parameter indices are 1-based within self.parameters
+    -- local param1Value = self.parameters[1]
+    -- local param2Value = self.parameters[2] -- This will be a float
+    -- local enumChoice = self.parameters[3] -- This will be the index (1, 2, or 3)
+
+    -- TODO: Implement your core processing logic here
+    -- Example: Simple Sine LFO
+    -- self.phase = (self.phase or 0) + dt * (1 + inputs[1]) -- Freq modulated by Input 1
+    -- self.phase = self.phase % 1.0
+    -- local outputValue = math.sin(self.phase * 2 * math.pi) * 5.0 -- +/- 5V Sine
+
+    -- Return a table of output values (indexed by output number)
+    -- You only need to include outputs that changed.
+    -- return { [1] = outputValue }
+    return {} -- Return empty table if no outputs changed in this step
+  end,
+  --]]
+
+  -- == Trigger Input Handler (Called when a kTrigger input fires) ==
+  -- Use trigger for event-based processing
+  --[[ -- Uncomment this block if you have kTrigger inputs --
+  trigger = function(self, input)
+    -- input: Index (1-based) of the kTrigger input that fired
+
+    print(self.name .. ": Trigger received on input " .. input)
+
+    -- TODO: Implement logic to react to the trigger
+    -- Example: Reset phase or trigger an envelope
+    -- self.phase = 0
+
+    -- Optionally, return output values
+    -- return { [1] = 5.0 } -- Send a pulse on output 1
+    return {}
+  end,
+  --]]
+
+  -- == Gate Input Handler (Called when a kGate input changes state) ==
+  -- Use gate for processing based on gate high/low states
+  --[[ -- Uncomment this block if you have kGate inputs --
+  gate = function(self, input, rising)
+    -- input: Index (1-based) of the kGate input that changed
+    -- rising: Boolean, true if the gate just went high, false if it went low
+
+    if rising then
+      print(self.name .. ": Gate opened on input " .. input)
+      -- TODO: Implement logic for gate opening (e.g., start envelope attack)
+    else
+      print(self.name .. ": Gate closed on input " .. input)
+      -- TODO: Implement logic for gate closing (e.g., start envelope release)
+    end
+
+    -- Optionally, return output values
+    -- local gateStateValue = rising and 5.0 or 0.0
+    -- return { [1] = gateStateValue }
+    return {}
+  end,
+  --]]
+
+  -- == Drawing Function (Called every ~33ms / 30fps if defined) ==
+  --[[ -- Uncomment this block if you need a custom display --
+  draw = function(self)
+    -- Use drawXXX functions to create a custom display
+    -- Coordinates: (0,0) is top-left, display is 256x64 pixels
+    -- Colour: 0 (off) to 15 (fully lit)
+
+    -- Example: Draw some text
+    drawText(10, 30, "My Custom Display!", 15)
+
+    -- Example: Accessing parameters for display
+    -- Remember self.parameterOffset when using global parameter functions!
+    -- local algIdx = getCurrentAlgorithm()
+    -- local currentGlobalParamIdx = getCurrentParameter(algIdx)
+    -- local currentScriptParamIdx = currentGlobalParamIdx - self.parameterOffset
+    -- if self.parameters[currentScriptParamIdx] then
+    --   drawText(10, 45, "Param " .. currentScriptParamIdx .. ": " .. self.parameters[currentScriptParamIdx], 12)
+    -- end
+
+    -- Return true to hide the default parameter line at the top
+    -- return true
+    -- Return false or nil to show the default parameter line
+    return false
+  end,
+  --]]
+
+  -- == Custom UI Flag (Optional) ==
+  --[[ -- Uncomment this block if providing custom UI handlers --
+  ui = function(self)
+    -- Return true if this script handles UI events directly
+    -- (pots, encoders, buttons) via the functions below.
+    -- If true, setupUi and the relevant handlers should usually be defined.
+    return true
+  end,
+  --]]
+
+  -- == Custom UI Setup (Called when UI becomes active if ui() returns true) ==
+  --[[ -- Uncomment this block if ui() returns true and pots are used --
+  setupUi = function(self)
+    print(self.name .. ": setupUi called")
+    -- Required for soft takeover if pots have custom behaviour.
+    -- Get the current internal state corresponding to pots.
+    -- TODO: Replace with your actual state variable(s) mapped to pots
+    local pot1InternalValue = self.myPot1ControlledValue or 0
+    local pot2InternalValue = self.myPot2ControlledValue or 0
+    local pot3InternalValue = self.myPot3ControlledValue or 0
+
+    -- Return a table mapping pot index to its current value (0.0 - 1.0)
+    local potSyncValues = {}
+    -- Example: Map internal value (0-100) back to 0.0-1.0 for pot 1
+    potSyncValues[1] = pot1InternalValue / 100.0
+    -- potSyncValues[2] = pot2InternalValue / 10.0 -- Example if range is 0-10
+    -- potSyncValues[3] = pot3InternalValue -- Example if range is already 0.0-1.0
+
+    return potSyncValues
+  end,
+  --]]
+
+  -- == Custom UI Event Handlers (Optional, requires ui() to return true) ==
+  -- Define functions for the UI events you want to handle.
+  -- See UI Script template (or Disting NT manual pp. 16-17) for the full list and function signatures.
+  --[[ -- Uncomment and implement handlers as needed if ui() returns true --
+  pot1Turn = function(self, value)
+    -- value is 0.0 to 1.0
+    print(self.name .. ": Pot 1 turned to " .. value)
+    -- TODO: Handle pot 1 turn
+    -- Example: self.myPot1ControlledValue = math.floor(value * 100 + 0.5)
+    -- If directly controlling a parameter, you might use setParameterNormalized
+    -- Note: Parameter indices need self.parameterOffset for global functions
+    -- local algIdx = getCurrentAlgorithm()
+    -- local paramIdx = 1 -- Assuming Param 1 Int from above
+    -- setParameterNormalized(algIdx, self.parameterOffset + paramIdx, value)
+  end,
+
+  button1Push = function(self)
+    -- TODO: Handle button 1 push
+    print(self.name .. ": Button 1 pushed")
+  end,
+  --]]
+
+  -- == Serialization Function (Called when saving preset) ==
+  --[[ -- Uncomment this block if you need to save state with presets --
+  serialise = function(self)
+    print(self.name .. ": serialise called")
+    -- Create a table containing data to save in the preset (JSON-friendly)
+    local stateToSave = {}
+    -- TODO: Add script state to save
+    -- stateToSave.myValue = myStateVariable
+    -- stateToSave.someSetting = self.parameters[3] -- Example: save enum choice index
+    -- stateToSave.complexData = { list = {1, 2, 3}, flag = true }
+
+    -- This table will be available as self.state in the init function when loaded
+    return stateToSave
+  end,
+  --]]
+
+} -- End of main return table
