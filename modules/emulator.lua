@@ -36,6 +36,111 @@ local MinimalMode = require("modules.minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
 local debug_utils = require("modules.debug_utils")
 
+local origUpdateTime, origUpdateTriggers, origRender, origUpdateParams
+
+-- Enable memory profiling for key functions
+local function enableFunctionProfiling()
+    -- Wrap important functions for memory profiling
+    local functionsToProfile = {
+        "update",
+        "draw",
+        "updateTriggerPulses",
+        "loadScriptFromPath",
+        "loadScriptFromPathWithData"
+    }
+    
+    -- Keep references to original functions
+    local originalFunctions = {}
+    
+    for _, funcName in ipairs(functionsToProfile) do
+        if M[funcName] then
+            originalFunctions[funcName] = M[funcName]
+            M[funcName] = debug_utils.createMemoryTrackingWrapper("emulator." .. funcName, M[funcName])
+        end
+    end
+    
+    -- Profile signal_processor functions
+    if signalProcessor.updateTime then
+        origUpdateTime = signalProcessor.updateTime
+        signalProcessor.updateTime = debug_utils.createMemoryTrackingWrapper(
+            "signal_processor.updateTime", origUpdateTime)
+    end
+    
+    if signalProcessor.updateTriggerPulses then
+        origUpdateTriggers = signalProcessor.updateTriggerPulses
+        signalProcessor.updateTriggerPulses = debug_utils.createMemoryTrackingWrapper(
+            "signal_processor.updateTriggerPulses", origUpdateTriggers)
+    end
+    
+    -- Profile display functions
+    if display.render then
+        origRender = display.render
+        display.render = debug_utils.createMemoryTrackingWrapper(
+            "display.render", origRender)
+    end
+    
+    -- Profile parameter-related functions
+    if parameterManager.updateParameters then
+        origUpdateParams = parameterManager.updateParameters
+        parameterManager.updateParameters = debug_utils.createMemoryTrackingWrapper(
+            "parameterManager.updateParameters", origUpdateParams)
+    end
+    
+    -- Reset profiling - restore original functions
+    return function()
+        for funcName, origFunc in pairs(originalFunctions) do
+            M[funcName] = origFunc
+        end
+        
+        if origUpdateTime then
+            signalProcessor.updateTime = origUpdateTime
+        end
+        
+        if origUpdateTriggers then
+            signalProcessor.updateTriggerPulses = origUpdateTriggers
+        end
+        
+        if origRender then
+            display.render = origRender
+        end
+        
+        if origUpdateParams then
+            parameterManager.updateParameters = origUpdateParams
+        end
+        
+        debug_utils.debugLog("Function profiling disabled")
+    end
+end
+
+local disableFunctionProfiling = nil
+
+-- Add this to the module's public interface
+function M.enableMemoryProfiling()
+    debug_utils.setDebugEnabled(true)
+    debug_utils.initMemoryProfiling()
+    debug_utils.setGCMode("setpause", 120) -- Less frequent GC
+    disableFunctionProfiling = enableFunctionProfiling()
+    debug_utils.debugLog("Memory profiling enabled")
+    return true
+end
+
+function M.disableMemoryProfiling()
+    if disableFunctionProfiling then
+        disableFunctionProfiling()
+        disableFunctionProfiling = nil
+    end
+    debug_utils.setGCMode("setpause", 100) -- Default GC behavior
+    debug_utils.printMemoryReport() -- Final report
+    debug_utils.setDebugEnabled(false)
+    debug_utils.debugLog("Memory profiling disabled")
+    return true
+end
+
+-- Toggle script-specific memory tracking
+function M.toggleScriptMemoryTracking()
+    return scriptManager.toggleScriptMemoryTracking()
+end
+
 --------------------------------------------------------------------------------
 -- Configuration
 --------------------------------------------------------------------------------
@@ -294,7 +399,7 @@ function M.load()
     love.graphics.setLineJoin("miter")
 
     -- Initialize signal processor
-    signalProcessor.init({safeScriptCall = safeScriptCall})
+    signalProcessor.init({safeScriptCall = safeScriptCall, scriptManager = scriptManager})
 
     -- Initialize parameter manager
     parameterManager.init({helpers = helpers})
@@ -419,7 +524,7 @@ function M.update(dt)
 
     -- Update time counter and trigger pulse states
     time = signalProcessor.updateTime(dt)
-    signalProcessor.updateTriggerPulses()
+    signalProcessor.updateTriggerPulses(scriptInputAssignments, script)
 
     -- Update active state based on current overlay and minimal mode
     controls.setActive(windowManager.getActiveOverlay() == "controls" and
@@ -532,27 +637,49 @@ function M.update(dt)
         fontSmall = fontSmall
     })
 
+    -- Initialize time tracking for step and draw calls if not already set
+    if not M.lastStepTime then M.lastStepTime = 0 end
+    if not M.lastDrawTime then M.lastDrawTime = 0 end
+    if not M.stepAccumulator then M.stepAccumulator = 0 end
+    
+    -- Emulate hardware timing:
+    -- step() called at ~1000Hz (every 1ms)
+    -- draw() called at ~30Hz (every 33.33ms)
+    local currentTime = love.timer.getTime()
+    local stepInterval = 0.001 -- 1ms for 1000Hz step rate
+    local drawInterval = 0.0333 -- 33.33ms for 30Hz draw rate
+    
+    -- Accumulate time for step calls
+    M.stepAccumulator = M.stepAccumulator + dt
+    
     -- Update input values
     currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
 
     -- Update automated parameters
     parameterManager.updateAutomatedParameters(currentInputs,
-                                               signalProcessor.getInputPolarity())
+                                             signalProcessor.getInputPolarity())
 
     -- Create inputs table to pass to script.step
     local scriptInputValues = signalProcessor.prepareScriptInputValues(
-                                  scriptInputCount, scriptInputAssignments)
+                              scriptInputCount, scriptInputAssignments)
 
     -- Reset unconnected outputs
     signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
-
-    -- Call the script's step function to update outputs
-    local outputValues = scriptManager.callScriptStep(dt, scriptInputValues)
-
+    
+    -- Call step as many times as needed to match 1000Hz
+    local outputValues
+    while M.stepAccumulator >= stepInterval do
+        -- Call the script's step function to update outputs
+        outputValues = scriptManager.callScriptStep(stepInterval, scriptInputValues)
+        
+        M.stepAccumulator = M.stepAccumulator - stepInterval
+        M.lastStepTime = currentTime
+    end
+    
     -- Update outputs with values from script
     if outputValues then
         currentOutputs = signalProcessor.updateOutputs(outputValues,
-                                                       scriptOutputAssignments)
+                                                   scriptOutputAssignments)
     end
 
     -- Send outputs via OSC
@@ -568,6 +695,10 @@ function M.update(dt)
         end
         osc_client.sendOutputs(oscOutputs)
     end
+    
+    -- We'll leave the draw function call to Love2D's natural draw cycle
+    -- but we'll only call scriptManager.callScriptDraw() at the correct rate
+    -- by checking time in the draw function
 end
 
 function M.draw()
@@ -576,22 +707,34 @@ function M.draw()
     -- Reset color to white at the beginning to ensure a clean state
     love.graphics.setColor(1, 1, 1, 1)
 
-    -- 1) Set up the display canvas for script drawing
-    display.clear()
+    -- Only update the display canvas at 30Hz rate to match hardware
+    local currentTime = love.timer.getTime()
+    local drawInterval = 0.0333 -- 33.33ms for 30Hz
+    
+    -- Initialize lastDrawTime if not already set
+    if not M.lastDrawTime then M.lastDrawTime = 0 end
+    
+    -- Only clear and redraw the script content at 30Hz
+    if currentTime - M.lastDrawTime >= drawInterval then
+        -- 1) Set up the display canvas for script drawing
+        display.clear()
+        
+        -- Start drawing to display's canvas with clean state
+        love.graphics.push("all")
+        love.graphics.setCanvas(display.getConfig().canvas)
+        love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
 
-    -- Start drawing to display's canvas with clean state
-    love.graphics.push("all")
-    love.graphics.setCanvas(display.getConfig().canvas)
-    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
+        -- Draw script content to display canvas with error handling
+        scriptManager.callScriptDraw()
+        M.lastDrawTime = currentTime
+        
+        -- Reset canvas state
+        love.graphics.setCanvas()
+        love.graphics.pop()
+    end
 
-    -- Draw script content to display canvas with error handling
-    scriptManager.callScriptDraw()
-
-    -- Reset canvas state
-    love.graphics.setCanvas()
-    love.graphics.pop()
-
-    -- Reset color to white after canvas operations
+    -- Always render the display at full frame rate
+    -- Reset color to white before rendering
     love.graphics.setColor(1, 1, 1, 1)
 
     -- If in minimal mode, use minimal mode drawing
