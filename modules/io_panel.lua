@@ -11,6 +11,11 @@ local helpers = require("modules.helpers")
 
 -- Helper function to wrap and ellipsize text
 local function wrapAndEllipsizeText(text, font, maxWidth, maxLines)
+    -- If the entire text fits in one line, just return it
+    if font:getWidth(text) <= maxWidth then
+        return {text}
+    end
+
     local words = {}
     for word in text:gmatch("%S+") do table.insert(words, word) end
 
@@ -22,20 +27,54 @@ local function wrapAndEllipsizeText(text, font, maxWidth, maxLines)
         local wordWidth = font:getWidth(word)
         local spaceWidth = font:getWidth(" ")
 
-        if currentLine == "" then
-            -- First word on the line
-            currentLine = word
-            currentWidth = wordWidth
-        else
-            -- Check if adding this word would exceed maxWidth
-            if currentWidth + spaceWidth + wordWidth <= maxWidth then
-                currentLine = currentLine .. " " .. word
-                currentWidth = currentWidth + spaceWidth + wordWidth
+        -- Handle very long words that exceed maxWidth on their own
+        if wordWidth > maxWidth then
+            -- If this is the first word on the line, we need to split it
+            if currentLine == "" then
+                -- Add as much of the word as possible
+                local partialWord = ""
+                for j = 1, #word do
+                    local nextChar = word:sub(j, j)
+                    local newWidth = font:getWidth(partialWord .. nextChar)
+                    if newWidth > maxWidth then
+                        -- We've reached the limit
+                        if partialWord == "" then
+                            -- If we couldn't fit even one character, just take it
+                            partialWord = nextChar
+                        end
+                        table.insert(lines, partialWord)
+                        
+                        -- Check if we've reached max lines
+                        if #lines >= maxLines then
+                            -- Ellipsize the last line
+                            local lastLine = lines[#lines]
+                            while font:getWidth(lastLine .. "...") > maxWidth do
+                                lastLine = lastLine:sub(1, -2)
+                            end
+                            lines[#lines] = lastLine .. "..."
+                            return lines
+                        end
+                        
+                        -- Start a new line with the remainder
+                        currentLine = ""
+                        partialWord = ""
+                    else
+                        partialWord = partialWord .. nextChar
+                    end
+                end
+                
+                -- Add any remaining part of the word
+                if partialWord ~= "" then
+                    currentLine = partialWord
+                    currentWidth = font:getWidth(partialWord)
+                end
             else
-                -- Start a new line
+                -- Add the current line and start a new one with this long word
                 table.insert(lines, currentLine)
+                
+                -- Check if we've reached max lines
                 if #lines >= maxLines then
-                    -- If we've reached max lines, ellipsize the last line
+                    -- Ellipsize the last line
                     local lastLine = lines[#lines]
                     while font:getWidth(lastLine .. "...") > maxWidth do
                         lastLine = lastLine:sub(1, -2)
@@ -43,8 +82,39 @@ local function wrapAndEllipsizeText(text, font, maxWidth, maxLines)
                     lines[#lines] = lastLine .. "..."
                     return lines
                 end
+                
+                -- Start a new line and process this word again
+                currentLine = ""
+                currentWidth = 0
+                -- Decrement i to process this word again
+                i = i - 1
+            end
+        else
+            -- Normal word that fits within maxWidth
+            if currentLine == "" then
+                -- First word on the line
                 currentLine = word
                 currentWidth = wordWidth
+            else
+                -- Check if adding this word would exceed maxWidth
+                if currentWidth + spaceWidth + wordWidth <= maxWidth then
+                    currentLine = currentLine .. " " .. word
+                    currentWidth = currentWidth + spaceWidth + wordWidth
+                else
+                    -- Start a new line
+                    table.insert(lines, currentLine)
+                    if #lines >= maxLines then
+                        -- If we've reached max lines, ellipsize the last line
+                        local lastLine = lines[#lines]
+                        while font:getWidth(lastLine .. "...") > maxWidth do
+                            lastLine = lastLine:sub(1, -2)
+                        end
+                        lines[#lines] = lastLine .. "..."
+                        return lines
+                    end
+                    currentLine = word
+                    currentWidth = wordWidth
+                end
             end
         end
     end
@@ -105,7 +175,14 @@ function io_panel.drawScriptIO(params)
     local screenWidth = params.screenWidth or love.graphics.getWidth()
     local cellH = params.cellH or 40 -- Default to 40 if not provided
 
-    love.graphics.setFont(font)
+    -- Create a smaller font for labels
+    local labelFont = love.graphics.newFont(9) -- Smaller font for labels (reduced from 10px)
+    
+    -- Store original font to restore later
+    local originalFont = love.graphics.getFont()
+    
+    -- Set to the smaller font for labels
+    love.graphics.setFont(labelFont)
 
     -- Layout configuration
     local circleRadius = 10
@@ -115,7 +192,7 @@ function io_panel.drawScriptIO(params)
     local columnWidth = 200 -- Width of each main column
     local titleFont = love.graphics.newFont(16)
     local titleHeight = 33 -- Space for title
-    local maxTextWidth = 120 -- Maximum width for wrapped text
+    local maxTextWidth = 60 -- Maximum width for wrapped text (reduced from 120px)
     local leftScreenMargin = 16 -- Minimum margin from screen edge
 
     -- Calculate total width needed for all elements (three equal columns)
@@ -130,17 +207,17 @@ function io_panel.drawScriptIO(params)
     local outputNames = {}
     local wrappedInputNames = {}
     local wrappedOutputNames = {}
-    local fontHeight = font:getHeight()
+    local fontHeight = labelFont:getHeight() -- Use smaller font height
 
     -- Calculate the maximum width needed for input labels
     local maxInputWidth = 0
     for i = 1, inputCount do
         inputNames[i] = getInputName(script, i)
-        wrappedInputNames[i] = wrapAndEllipsizeText(inputNames[i], font,
+        wrappedInputNames[i] = wrapAndEllipsizeText(inputNames[i], labelFont,
                                                     maxTextWidth, 2)
         -- Calculate maximum width needed for this input's lines
         for _, line in ipairs(wrappedInputNames[i]) do
-            maxInputWidth = math.max(maxInputWidth, font:getWidth(line))
+            maxInputWidth = math.max(maxInputWidth, labelFont:getWidth(line))
         end
     end
 
@@ -150,7 +227,7 @@ function io_panel.drawScriptIO(params)
 
     for i = 1, outputCount do
         outputNames[i] = getOutputName(script, i)
-        wrappedOutputNames[i] = wrapAndEllipsizeText(outputNames[i], font,
+        wrappedOutputNames[i] = wrapAndEllipsizeText(outputNames[i], labelFont,
                                                      maxTextWidth, 2)
     end
 
@@ -178,7 +255,10 @@ function io_panel.drawScriptIO(params)
     love.graphics.print(outputTitle, outputTitleX, ioY)
 
     -- Reset to normal font
-    love.graphics.setFont(font)
+    love.graphics.setFont(originalFont)
+
+    -- Reset to smaller font for labels before drawing script IO elements
+    love.graphics.setFont(labelFont)
 
     -- Adjust Y position for the actual I/O elements to account for title
     local elementsY = ioY + titleHeight
@@ -208,10 +288,20 @@ function io_panel.drawScriptIO(params)
 
         -- Draw wrapped text lines
         local lines = wrappedInputNames[i]
-        local textY = cy - (#lines * fontHeight / 2)
+        local lineCount = #lines
+        -- Adjust vertical positioning based on line count
+        local textY
+        if lineCount == 1 then
+            -- Center single line vertically with the circle with 1px offset
+            textY = cy - fontHeight / 2 - 1
+        else
+            -- Center multiple lines as a block with 1px offset
+            textY = cy - (lineCount * fontHeight) / 2 - 1
+        end
+        
         for j, line in ipairs(lines) do
             local x = cx - circleTextSpacing - circleRadius -
-                          font:getWidth(line)
+                          labelFont:getWidth(line)
             love.graphics.setColor(1, 1, 1)
             love.graphics.print(line, x, textY + (j - 1) * fontHeight)
         end
@@ -227,7 +317,7 @@ function io_panel.drawScriptIO(params)
 
             love.graphics.setColor(0, 0, 0)
             local label = tostring(inputAssignments[i])
-            local lw = font:getWidth(label)
+            local lw = labelFont:getWidth(label)
             love.graphics.print(label, cx - lw / 2, cy - fontHeight / 2)
 
             love.graphics.setColor(1, 1, 1)
@@ -258,10 +348,20 @@ function io_panel.drawScriptIO(params)
 
         -- Draw wrapped text lines
         local lines = wrappedOutputNames[i]
-        local textY = cy - (#lines * fontHeight / 2)
+        local lineCount = #lines
+        -- Adjust vertical positioning based on line count
+        local textY
+        if lineCount == 1 then
+            -- Center single line vertically with the circle with 1px offset
+            textY = cy - fontHeight / 2 - 1
+        else
+            -- Center multiple lines as a block with 1px offset
+            textY = cy - (lineCount * fontHeight) / 2 - 1
+        end
+        
         for j, line in ipairs(lines) do
             local x = cx - circleTextSpacing - circleRadius -
-                          font:getWidth(line)
+                          labelFont:getWidth(line)
             love.graphics.setColor(1, 1, 1)
             love.graphics.print(line, x, textY + (j - 1) * fontHeight)
         end
@@ -277,7 +377,7 @@ function io_panel.drawScriptIO(params)
 
             love.graphics.setColor(0, 0, 0)
             local label = tostring(outputAssignments[i])
-            local lw = font:getWidth(label)
+            local lw = labelFont:getWidth(label)
             love.graphics.print(label, cx - lw / 2, cy - fontHeight / 2)
 
             love.graphics.setColor(1, 1, 1)
@@ -285,6 +385,9 @@ function io_panel.drawScriptIO(params)
         end
     end
 
+    -- Restore original font when done with IO panel
+    love.graphics.setFont(originalFont)
+    
     return elementsY -- Return the Y position where elements start (after title)
 end
 
