@@ -1,5 +1,6 @@
 -- parameter_knobs.lua
 local parameter_knobs = {}
+local helpers = require("modules.helpers")
 
 function parameter_knobs.draw(params)
     local scriptParameters = params.scriptParameters
@@ -27,6 +28,7 @@ function parameter_knobs.draw(params)
     local nameHeight = 10 * uiScaleFactor
     local valueHeight = 10 * uiScaleFactor
     local autoHeight = 10 * uiScaleFactor
+    local maxLabelWidth = 70 * uiScaleFactor -- Maximum width for wrapped text
 
     -- Calculate total height required for a knob with all labels
     local knobTotalHeight = knobDiameter + nameHeight + valueHeight +
@@ -117,19 +119,19 @@ function parameter_knobs.draw(params)
             end
         end
 
-        -- Draw parameter name above the knob
-        local nameWidth = labelFont:getWidth(sp.name)
+        -- Draw parameter name above the knob with text wrapping
         love.graphics.setColor(1, 1, 1)
-        love.graphics.print(sp.name, displayX - nameWidth / 2,
-                            displayY - scaledKnobRadius - 16 * uiScaleFactor)
-
-        -- Show automation indicator if applicable
-        if parameterAutomation[i] then
-            love.graphics.setColor(0.3, 0.5, 1.0, 0.8)
-            local autoText = "CV" .. parameterAutomation[i]
-            local autoWidth = labelFont:getWidth(autoText)
-            love.graphics.print(autoText, displayX - autoWidth / 2, displayY -
-                                    scaledKnobRadius - 28 * uiScaleFactor)
+        local wrappedName = helpers.wrapAndEllipsizeText(sp.name, labelFont, maxLabelWidth, 2)
+        local fontHeight = labelFont:getHeight()
+        local totalNameHeight = #wrappedName * fontHeight
+        
+        -- Position name above the knob
+        local nameY = displayY - scaledKnobRadius - totalNameHeight - 6 * uiScaleFactor
+        
+        -- Draw each line of the name centered above the knob
+        for j, line in ipairs(wrappedName) do
+            local lineWidth = labelFont:getWidth(line)
+            love.graphics.print(line, displayX - lineWidth / 2, nameY + (j-1) * fontHeight)
         end
 
         -- Draw the current value below the knob
@@ -156,6 +158,15 @@ function parameter_knobs.draw(params)
         love.graphics.setColor(1, 1, 0.7, 1.0)
         love.graphics.print(valStr, displayX - valWidth / 2,
                             displayY + scaledKnobRadius + 4 * uiScaleFactor)
+        
+        -- Show automation indicator if applicable - moved below the value
+        if parameterAutomation[i] then
+            love.graphics.setColor(0.3, 0.5, 1.0, 0.8)
+            local autoText = "CV" .. parameterAutomation[i]
+            local autoWidth = labelFont:getWidth(autoText)
+            love.graphics.print(autoText, displayX - autoWidth / 2, 
+                               displayY + scaledKnobRadius + 4 * uiScaleFactor + fontHeight + 2 * uiScaleFactor)
+        end
     end
 
     -- Restore previous font

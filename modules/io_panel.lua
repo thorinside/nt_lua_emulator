@@ -9,161 +9,6 @@ local bpmButtonPositions = {} -- Store BPM button positions
 
 local helpers = require("modules.helpers")
 
--- Helper function to wrap and ellipsize text
-local function wrapAndEllipsizeText(text, font, maxWidth, maxLines)
-    -- If the entire text fits in one line, just return it
-    if font:getWidth(text) <= maxWidth then
-        return {text}
-    end
-
-    local words = {}
-    for word in text:gmatch("%S+") do table.insert(words, word) end
-
-    local lines = {}
-    local currentLine = ""
-    local currentWidth = 0
-
-    for i, word in ipairs(words) do
-        local wordWidth = font:getWidth(word)
-        local spaceWidth = font:getWidth(" ")
-
-        -- Handle very long words that exceed maxWidth on their own
-        if wordWidth > maxWidth then
-            -- If this is the first word on the line, we need to split it
-            if currentLine == "" then
-                -- Add as much of the word as possible
-                local partialWord = ""
-                for j = 1, #word do
-                    local nextChar = word:sub(j, j)
-                    local newWidth = font:getWidth(partialWord .. nextChar)
-                    if newWidth > maxWidth then
-                        -- We've reached the limit
-                        if partialWord == "" then
-                            -- If we couldn't fit even one character, just take it
-                            partialWord = nextChar
-                        end
-                        table.insert(lines, partialWord)
-                        
-                        -- Check if we've reached max lines
-                        if #lines >= maxLines then
-                            -- Ellipsize the last line
-                            local lastLine = lines[#lines]
-                            while font:getWidth(lastLine .. "...") > maxWidth do
-                                lastLine = lastLine:sub(1, -2)
-                            end
-                            lines[#lines] = lastLine .. "..."
-                            return lines
-                        end
-                        
-                        -- Start a new line with the remainder
-                        currentLine = ""
-                        partialWord = ""
-                    else
-                        partialWord = partialWord .. nextChar
-                    end
-                end
-                
-                -- Add any remaining part of the word
-                if partialWord ~= "" then
-                    currentLine = partialWord
-                    currentWidth = font:getWidth(partialWord)
-                end
-            else
-                -- Add the current line and start a new one with this long word
-                table.insert(lines, currentLine)
-                
-                -- Check if we've reached max lines
-                if #lines >= maxLines then
-                    -- Ellipsize the last line
-                    local lastLine = lines[#lines]
-                    while font:getWidth(lastLine .. "...") > maxWidth do
-                        lastLine = lastLine:sub(1, -2)
-                    end
-                    lines[#lines] = lastLine .. "..."
-                    return lines
-                end
-                
-                -- Start a new line and process this word again
-                currentLine = ""
-                currentWidth = 0
-                -- Decrement i to process this word again
-                i = i - 1
-            end
-        else
-            -- Normal word that fits within maxWidth
-            if currentLine == "" then
-                -- First word on the line
-                currentLine = word
-                currentWidth = wordWidth
-            else
-                -- Check if adding this word would exceed maxWidth
-                if currentWidth + spaceWidth + wordWidth <= maxWidth then
-                    currentLine = currentLine .. " " .. word
-                    currentWidth = currentWidth + spaceWidth + wordWidth
-                else
-                    -- Start a new line
-                    table.insert(lines, currentLine)
-                    if #lines >= maxLines then
-                        -- If we've reached max lines, ellipsize the last line
-                        local lastLine = lines[#lines]
-                        while font:getWidth(lastLine .. "...") > maxWidth do
-                            lastLine = lastLine:sub(1, -2)
-                        end
-                        lines[#lines] = lastLine .. "..."
-                        return lines
-                    end
-                    currentLine = word
-                    currentWidth = wordWidth
-                end
-            end
-        end
-    end
-
-    -- Add the last line if there is one
-    if currentLine ~= "" then
-        table.insert(lines, currentLine)
-        if #lines > maxLines then
-            -- If we've exceeded max lines, ellipsize the last line
-            local lastLine = lines[maxLines]
-            while font:getWidth(lastLine .. "...") > maxWidth do
-                lastLine = lastLine:sub(1, -2)
-            end
-            lines[maxLines] = lastLine .. "..."
-            -- Remove any extra lines
-            for i = maxLines + 1, #lines do lines[i] = nil end
-        end
-    end
-
-    return lines
-end
-
--- Helper functions to retrieve input/output names (copied from emulator.lua)
-local function getInputName(script, i)
-    if script.inputNames and script.inputNames[i] then
-        return script.inputNames[i]
-    else
-        if type(script.inputs) == "table" then
-            local t = script.inputs[i] or "CV"
-            return "In " .. i .. " (" .. tostring(t) .. ")"
-        else
-            return "In " .. i
-        end
-    end
-end
-
-local function getOutputName(script, i)
-    if script.outputNames and script.outputNames[i] then
-        return script.outputNames[i]
-    else
-        if type(script.outputs) == "table" then
-            local t = script.outputs[i] or "CV"
-            return "Out " .. i .. " (" .. tostring(t) .. ")"
-        else
-            return "Out " .. i
-        end
-    end
-end
-
 function io_panel.drawScriptIO(params)
     local script = params.script
     local font = params.font
@@ -212,8 +57,8 @@ function io_panel.drawScriptIO(params)
     -- Calculate the maximum width needed for input labels
     local maxInputWidth = 0
     for i = 1, inputCount do
-        inputNames[i] = getInputName(script, i)
-        wrappedInputNames[i] = wrapAndEllipsizeText(inputNames[i], labelFont,
+        inputNames[i] = helpers.getInputName(script, i)
+        wrappedInputNames[i] = helpers.wrapAndEllipsizeText(inputNames[i], labelFont,
                                                     maxTextWidth, 2)
         -- Calculate maximum width needed for this input's lines
         for _, line in ipairs(wrappedInputNames[i]) do
@@ -226,8 +71,8 @@ function io_panel.drawScriptIO(params)
                            circleRadius
 
     for i = 1, outputCount do
-        outputNames[i] = getOutputName(script, i)
-        wrappedOutputNames[i] = wrapAndEllipsizeText(outputNames[i], labelFont,
+        outputNames[i] = helpers.getOutputName(script, i)
+        wrappedOutputNames[i] = helpers.wrapAndEllipsizeText(outputNames[i], labelFont,
                                                      maxTextWidth, 2)
     end
 
