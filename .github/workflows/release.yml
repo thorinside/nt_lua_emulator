@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,13 +82,23 @@ jobs:
           zip -r nt_lua_emulator.zip . -x ".git/*" ".github/*" ".DS_Store"
 
       - name: Create Release
+        uses: actions/create-release@v1
         id: create_release
-        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: nt_lua_emulator.zip
-          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
           body: ${{ steps.generate_release_notes.outputs.RELEASE_NOTES }}
           draft: false
           prerelease: false
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./nt_lua_emulator.zip
+          asset_name: nt_lua_emulator.zip
+          asset_content_type: application/zip 
