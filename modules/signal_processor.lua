@@ -23,6 +23,7 @@ local triggerPulseDuration = 0.1 -- 100ms pulse duration
 function M.init(deps)
     -- Store dependencies
     M.safeScriptCall = deps.safeScriptCall
+    M.scriptManager = deps.scriptManager
 
     -- Initialize input arrays with default values
     for i = 1, 12 do
@@ -151,12 +152,31 @@ function M.triggerPulse(inputIndex)
 end
 
 -- Update trigger pulse states
-function M.updateTriggerPulses()
+function M.updateTriggerPulses(scriptInputAssignments, script)
     for i = 1, 12 do
         if triggerPulseActive[i] then
             local pulseElapsed = time - (triggerPulseTimes[i] or 0)
             if pulseElapsed > triggerPulseDuration then
                 triggerPulseActive[i] = false
+            end
+            
+            -- Find which script inputs this physical input is assigned to
+            if script and type(script.inputs) == "table" then
+                for scriptInputIdx, assignedPhysInput in pairs(scriptInputAssignments) do
+                    if assignedPhysInput == i and script.inputs[scriptInputIdx] == kTrigger then
+                        -- This is a newly activated trigger input, call the trigger function
+                        -- Only call during the first frame of the pulse
+                        if pulseElapsed < 0.02 then
+                            if M.scriptManager then
+                                M.scriptManager.callScriptTrigger({
+                                    input = scriptInputIdx
+                                })
+                            else
+                                M.safeScriptCall(script.trigger, script, scriptInputIdx)
+                            end
+                        end
+                    end
+                end
             end
         end
     end
@@ -202,8 +222,15 @@ function M.updateInputs(scriptInputAssignments, script)
                         local prev = prevGateStates[i] or currentInputs[i]
                         if prev ~= currentInputs[i] then
                             local rising = (currentInputs[i] > prev)
-                            M.safeScriptCall(script.gate, script,
-                                             scriptInputIdx, rising)
+                            if M.scriptManager then
+                                M.scriptManager.callScriptGate({
+                                    input = scriptInputIdx,
+                                    rising = rising
+                                })
+                            else
+                                M.safeScriptCall(script.gate, script,
+                                                 scriptInputIdx, rising)
+                            end
                         end
                     end
                 end

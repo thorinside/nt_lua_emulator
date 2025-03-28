@@ -628,7 +628,13 @@ function M.mousereleased(x, y, button)
                 -- Call the script's trigger function if it exists
                 if M.script.trigger then
                     -- Pass the script input index, not the physical input index
-                    M.safeScriptCall(M.script.trigger, M.script, scriptInputIdx)
+                    if M.signalProcessor and M.signalProcessor.scriptManager then
+                        M.signalProcessor.scriptManager.callScriptTrigger({
+                            input = scriptInputIdx
+                        })
+                    else
+                        M.safeScriptCall(M.script.trigger, M.script, scriptInputIdx)
+                    end
                 end
             else
                 -- For non-trigger inputs, cycle through modes as before
