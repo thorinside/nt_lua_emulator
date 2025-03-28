@@ -1,0 +1,91 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: generate_release_notes
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep "^v" | head -n 2 | tail -n 1 || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # If no previous tag, get all commits
+            COMMITS=$(git log --pretty=format:"* %s" | grep -E "^\* (feat|fix|docs|style|refactor|perf|test|build|ci|chore):")
+          else
+            # Get commits between tags
+            COMMITS=$(git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD | grep -E "^\* (feat|fix|docs|style|refactor|perf|test|build|ci|chore):")
+          fi
+          
+          # Prepare release notes by category
+          echo "# Release Notes" > release_notes.md
+          echo "" >> release_notes.md
+          
+          if echo "$COMMITS" | grep -q "^\* feat:"; then
+            echo "## Features" >> release_notes.md
+            echo "$COMMITS" | grep "^\* feat:" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          if echo "$COMMITS" | grep -q "^\* fix:"; then
+            echo "## Bug Fixes" >> release_notes.md
+            echo "$COMMITS" | grep "^\* fix:" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          if echo "$COMMITS" | grep -q "^\* refactor:"; then
+            echo "## Refactoring" >> release_notes.md
+            echo "$COMMITS" | grep "^\* refactor:" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+          
+          # Add other categories as needed
+          CATEGORIES="docs style perf test build ci chore"
+          for CATEGORY in $CATEGORIES; do
+            if echo "$COMMITS" | grep -q "^\* $CATEGORY:"; then
+              echo "## ${CATEGORY^}" >> release_notes.md
+              echo "$COMMITS" | grep "^\* $CATEGORY:" >> release_notes.md
+              echo "" >> release_notes.md
+            fi
+          done
+          
+          # Ensure we have content, even if no conventional commits found
+          if [ ! -s release_notes.md ] || [ "$(cat release_notes.md)" = "# Release Notes" ]; then
+            echo "## Changes" >> release_notes.md
+            if [ -z "$PREVIOUS_TAG" ]; then
+              git log --pretty=format:"* %s" >> release_notes.md
+            else
+              git log --pretty=format:"* %s" ${PREVIOUS_TAG}..HEAD >> release_notes.md
+            fi
+          fi
+          
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create ZIP archive
+        run: |
+          zip -r nt_lua_emulator.zip . -x ".git/*" ".github/*" ".DS_Store"
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: nt_lua_emulator.zip
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.generate_release_notes.outputs.RELEASE_NOTES }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
