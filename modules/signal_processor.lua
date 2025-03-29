@@ -262,19 +262,20 @@ function M.updateInputs(scriptInputAssignments, script)
             end
         else
             -- CV mode - generate continuous values with sine waves
-            local baseValue = math.sin(time + i)
+            local baseValue = math.sin(time + i) * 10
 
+            -- Clamp the base value to the range of the input polarity
             if inputPolarity[i] == kBipolar then
-                -- Bipolar mode: -5V to +5V
-                currentInputs[i] = 5 * scale * baseValue
-                -- Clamp to valid range
-                currentInputs[i] = math.max(-5, math.min(5, currentInputs[i]))
+                baseValue = baseValue - 5
+                baseValue = math.max(-5, math.min(5, baseValue))
             else
-                -- Unipolar mode: 0V to +10V
-                -- First scale the base value, then shift to unipolar range
-                currentInputs[i] = 5 + (5 * scale * baseValue)
-                -- Clamp to valid range
-                currentInputs[i] = math.max(0, math.min(10, currentInputs[i]))
+                baseValue = math.max(0, math.min(10, baseValue))
+            end
+
+            if scale == 0 then
+                currentInputs[i] = 0
+            else
+                currentInputs[i] = scale * baseValue
             end
         end
     end

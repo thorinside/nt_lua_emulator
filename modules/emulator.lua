@@ -675,8 +675,7 @@ function M.update(dt)
                                                      script)
 
         -- Update automated parameters
-        parameterManager.updateAutomatedParameters(currentInputs,
-                                                   signalProcessor.getInputPolarity())
+        parameterManager.updateAutomatedParameters(currentInputs)
 
         -- Prepare script input values for each step
         scriptInputValues = signalProcessor.prepareScriptInputValues(

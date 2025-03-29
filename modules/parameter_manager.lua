@@ -54,11 +54,15 @@ function M.disconnectParameter(paramIndex)
         return false, "Parameter index out of range"
     end
 
+    -- If parameter has a stored base value, restore it
+    local param = scriptParameters[paramIndex]
+    if param.baseValue then
+        param.current = param.baseValue
+        param.baseValue = nil
+    end
+
     -- Remove the automation connection
     parameterAutomation[paramIndex] = nil
-
-    -- Clear the base value
-    scriptParameters[paramIndex].baseValue = nil
 
     return true
 end
@@ -110,6 +114,9 @@ function M.updateParameterValue(paramIndex, newValue)
     -- Update the parameter value
     param.current = newValue
 
+    -- If parameter is automated, also update baseValue
+    if parameterAutomation[paramIndex] then param.baseValue = newValue end
+
     -- Update the script's parameters
     M.updateScriptParameters()
 
@@ -117,64 +124,70 @@ function M.updateParameterValue(paramIndex, newValue)
 end
 
 -- Update all automated parameters based on input values
-function M.updateAutomatedParameters(currentInputs, inputPolarity)
+function M.updateAutomatedParameters(currentInputs)
     for paramIndex, inputIndex in pairs(parameterAutomation) do
         local sp = scriptParameters[paramIndex]
-        local inputValue = currentInputs[inputIndex] or 0
+        if not sp then goto continue end -- Skip if parameter doesn't exist
 
-        -- Store base value if not already stored when connecting the parameter
-        if sp and not sp.baseValue then sp.baseValue = sp.current end
+        -- Get the input voltage (already scaled for physical input)
+        local voltage = currentInputs[inputIndex] or 0
 
-        if sp and (sp.type == "integer" or sp.type == "float") then
-            -- First normalize the CV input to 0-1 range
-            local normalizedCV
-            if inputPolarity[inputIndex] == kBipolar then
-                -- Convert -5V to +5V range to -0.5 to +0.5 range
-                normalizedCV = inputValue / 10.0 -- -0.5 to +0.5
-            else
-                -- Convert 0V to +10V range to 0 to 1 range
-                normalizedCV = inputValue / 10.0 -- 0 to 1
-            end
+        -- Store base value (user-set value) if not already stored when connecting the parameter
+        if not sp.baseValue then sp.baseValue = sp.current end
+        local baseValue = sp.baseValue
 
-            -- Calculate parameter range (using unscaled values)
+        if sp.type == "integer" or sp.type == "float" then
+            -- Calculate parameter range
             local paramRange = sp.max - sp.min
 
-            -- Apply the normalized CV to the parameter range
-            local offset = normalizedCV * paramRange
+            -- Normalize the voltage by dividing by 12V
+            local normalizedVoltage = voltage / 12.0
 
-            -- Add offset to base value
-            local newValue = sp.baseValue + offset
+            -- Apply voltage as an offset from base value
+            -- When voltage is +12V, parameter should be at max
+            -- When voltage is -12V, parameter should be at min
+            -- When voltage is 0V, parameter should be at baseValue
+            local newValue = baseValue + (normalizedVoltage * paramRange)
+
+            -- Print debug info for this parameter
+            print(string.format(
+                      "Parameter %d: min=%d, max=%d, baseValue=%d, voltage=%.2f, normalizedVoltage=%.4f, newValue=%.2f",
+                      paramIndex, sp.min, sp.max, baseValue, voltage,
+                      normalizedVoltage, newValue))
 
             -- For integer parameters, round to nearest whole number
             if sp.type == "integer" then
                 newValue = math.floor(newValue + 0.5)
             end
 
-            -- Ensure value is within bounds (using unscaled values)
+            -- Ensure value is within bounds
             sp.current = math.max(sp.min, math.min(sp.max, newValue))
 
-        elseif sp and sp.type == "enum" then
-            -- For enum parameters, normalize CV to control enum indices
+        elseif sp.type == "enum" and sp.values then
+            -- For enum parameters
             local valueCount = #sp.values
 
-            -- First normalize the CV input
-            local normalizedCV
-            if inputPolarity[inputIndex] == kBipolar then
-                -- Convert -5V to +5V range to -0.5 to +0.5 range
-                normalizedCV = inputValue / 10.0 -- -0.5 to +0.5
-            else
-                -- Convert 0V to +10V range to 0 to 1 range
-                normalizedCV = inputValue / 10.0 -- 0 to 1
-            end
+            -- Normalize the voltage by dividing by 12V
+            local normalizedVoltage = voltage / 12.0
 
-            -- Scale normalized CV to enum range and add to base index
-            local offset = math.floor(normalizedCV * valueCount + 0.5)
-            local valueIndex = sp.baseValue + offset
+            -- Calculate how many steps to move from the base value
+            local enumRange = valueCount - 1
+            local offset = math.floor(normalizedVoltage * enumRange + 0.5)
+
+            -- Apply offset to base value
+            local newIndex = baseValue + offset
+
+            -- Print debug info for enum parameter
+            print(string.format(
+                      "Enum Parameter %d: values=%d, baseValue=%d, voltage=%.2f, normalizedVoltage=%.4f, offset=%d, newIndex=%d",
+                      paramIndex, valueCount, baseValue, voltage,
+                      normalizedVoltage, offset, newIndex))
 
             -- Ensure the index is valid
-            valueIndex = math.max(1, math.min(valueCount, valueIndex))
-            sp.current = valueIndex
+            sp.current = math.max(1, math.min(valueCount, newIndex))
         end
+
+        ::continue::
     end
 
     -- Update the script's parameters

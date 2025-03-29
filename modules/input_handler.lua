@@ -289,7 +289,7 @@ function M.mousepressed(x, y, button)
                         -- Clear any automation
                         if M.parameterAutomation[i] then
                             M.parameterAutomation[i] = nil
-                            sp.baseValue = nil
+                            sp.baseValue = nil -- Clear baseValue when removing automation
                         end
 
                         -- Reset to default value
@@ -548,7 +548,7 @@ function M.mousemoved(x, y, dx, dy)
         -- Disable mouse dragging behavior for parameter knobs
         -- Just continue to track the knob for mouse release but don't adjust values
         -- Values will only be changed using mouse wheel now
-        
+
         -- Update the script's parameters immediately
         M.helpers.updateScriptParameters(M.scriptParameters, M.script)
     end
@@ -633,7 +633,8 @@ function M.mousereleased(x, y, button)
                             input = scriptInputIdx
                         })
                     else
-                        M.safeScriptCall(M.script.trigger, M.script, scriptInputIdx)
+                        M.safeScriptCall(M.script.trigger, M.script,
+                                         scriptInputIdx)
                     end
                 end
             else
@@ -675,8 +676,6 @@ function M.mousereleased(x, y, button)
                     -- Use scaled radius for hit testing
                     local hitRadius = M.paramKnobRadius * M.uiScaleFactor
                     if dx * dx + dy * dy <= hitRadius * hitRadius then
-                        -- Store the current value as the base value before automation
-                        sp.baseValue = sp.current
                         -- Link the physical input to this parameter
                         M.parameterAutomation[i] = dragIndex
                         break
@@ -767,7 +766,8 @@ function M.wheelmoved(x, y)
                         -- Apply the step in the appropriate direction
                         newValue = sp.current + (y > 0 and step or -step)
                         -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
                             newValue = sp.current + (y > 0 and 1.0 or -1.0) -- Smaller step for fine control
                         end
                         -- Clamp between min and max
@@ -778,7 +778,8 @@ function M.wheelmoved(x, y)
                         -- Apply the step in the appropriate direction
                         newValue = sp.current + (y > 0 and step or -step)
                         -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
                             newValue = sp.current + (y > 0 and 10.0 or -10.0) -- Smaller step for fine control
                         end
                         -- Clamp between min and max
@@ -789,7 +790,8 @@ function M.wheelmoved(x, y)
                         -- Apply the step in the appropriate direction
                         newValue = sp.current + (y > 0 and step or -step)
                         -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
                             newValue = sp.current + (y > 0 and 100.0 or -100.0) -- Smaller step for fine control
                         end
                         -- Clamp between min and max
@@ -797,84 +799,94 @@ function M.wheelmoved(x, y)
                     else
                         -- For default float parameters, use a normalized continuous approach
                         local range = sp.max - sp.min
-                        
+
                         -- Calculate movement factor based on range
                         -- For larger ranges, use smaller movements per wheel step
                         local movementFactor = math.max(0.005, 0.1 / range)
-                        
+
                         -- Get current normalized position (0.0 to 1.0)
                         local currentNormalized = (sp.current - sp.min) / range
-                        
+
                         -- Apply the wheel movement
-                        currentNormalized = currentNormalized + (y * movementFactor)
-                        
+                        currentNormalized = currentNormalized +
+                                                (y * movementFactor)
+
                         -- Clamp the normalized value
-                        currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
-                        
+                        currentNormalized =
+                            math.max(0.0, math.min(1.0, currentNormalized))
+
                         -- Convert back to actual value
                         newValue = sp.min + (currentNormalized * range)
-                        
+
                         -- Hold SHIFT key for more precise control
-                        if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
                             -- Much finer control with shift
                             newValue = sp.current + (y > 0 and 0.05 or -0.05)
                         end
-                        
+
                         -- Clamp to parameter range
                         newValue = math.max(sp.min, math.min(sp.max, newValue))
                     end
                 elseif sp.type == "integer" then
                     -- For integer parameters, use a normalized continuous approach like enums
                     local range = sp.max - sp.min
-                    
+
                     -- Calculate movement factor based on range
                     -- For larger ranges, use smaller movements per wheel step
                     local movementFactor = math.max(0.005, 0.1 / range)
-                    
+
                     -- Get current normalized position (0.0 to 1.0)
                     local currentNormalized = (sp.current - sp.min) / range
-                    
+
                     -- Apply the wheel movement
                     currentNormalized = currentNormalized + (y * movementFactor)
-                    
+
                     -- Clamp the normalized value
-                    currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
-                    
+                    currentNormalized = math.max(0.0, math.min(1.0,
+                                                               currentNormalized))
+
                     -- Convert back to actual value
                     -- Don't round - allow smooth continuous movement between values
                     newValue = sp.min + (currentNormalized * range)
-                    
+
                     -- Hold SHIFT key for more precise control
-                    if love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift") then
+                    if love.keyboard.isDown("lshift") or
+                        love.keyboard.isDown("rshift") then
                         -- Much finer control with shift
                         newValue = sp.current + (y > 0 and 0.2 or -0.2)
                     end
-                    
+
                     -- Clamp to parameter range
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
                 elseif sp.type == "enum" then
                     -- For enum parameters, use a normalized approach with continuous movement
                     if sp.values then
                         local totalValues = #sp.values
-                        
+
                         -- Calculate how much to move based on wheel delta and enum count
                         -- More items = smaller movements per step, fewer items = larger movements
-                        local movementFactor = math.max(0.05, 0.15 / totalValues) -- Adjusted based on number of options
-                        
+                        local movementFactor =
+                            math.max(0.05, 0.15 / totalValues) -- Adjusted based on number of options
+
                         -- Get the current position as a normalized value (0.0 to 1.0)
                         -- Subtract 1 because enum indices start at 1 in Lua
-                        local currentNormalized = (sp.current - 1) / (totalValues - 1)
-                        
+                        local currentNormalized = (sp.current - 1) /
+                                                      (totalValues - 1)
+
                         -- Apply the wheel movement as a normalized adjustment
                         -- The y value is flipped for intuitive direction (up = increase)
-                        currentNormalized = currentNormalized + (y * movementFactor)
-                        
+                        currentNormalized = currentNormalized +
+                                                (y * movementFactor)
+
                         -- Clamp the normalized value between 0.0 and 1.0
-                        currentNormalized = math.max(0.0, math.min(1.0, currentNormalized))
-                        
+                        currentNormalized =
+                            math.max(0.0, math.min(1.0, currentNormalized))
+
                         -- Convert back to an enum index (1 to #values)
-                        newValue = math.floor(currentNormalized * (totalValues - 1) + 1.5)
-                        
+                        newValue = math.floor(currentNormalized *
+                                                  (totalValues - 1) + 1.5)
+
                         -- Ensure we're in valid range
                         newValue = math.max(1, math.min(totalValues, newValue))
                     else
@@ -886,12 +898,6 @@ function M.wheelmoved(x, y)
 
                 -- Only update if value actually changed
                 if newValue ~= sp.current then
-                    -- For automated parameters, adjust the base value to maintain the same CV offset
-                    if M.parameterAutomation[i] then
-                        local cvOffset = sp.current -
-                                             (sp.baseValue or sp.current)
-                        sp.baseValue = newValue - cvOffset
-                    end
                     sp.current = newValue
 
                     -- Update the script's parameters using the helper module
