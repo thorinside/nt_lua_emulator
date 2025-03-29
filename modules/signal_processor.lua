@@ -159,20 +159,25 @@ function M.updateTriggerPulses(scriptInputAssignments, script)
             if pulseElapsed > triggerPulseDuration then
                 triggerPulseActive[i] = false
             end
-            
+
             -- Find which script inputs this physical input is assigned to
             if script and type(script.inputs) == "table" then
-                for scriptInputIdx, assignedPhysInput in pairs(scriptInputAssignments) do
-                    if assignedPhysInput == i and script.inputs[scriptInputIdx] == kTrigger then
+                for scriptInputIdx, assignedPhysInput in pairs(
+                                                             scriptInputAssignments) do
+                    if assignedPhysInput == i and script.inputs[scriptInputIdx] ==
+                        kTrigger then
                         -- This is a newly activated trigger input, call the trigger function
                         -- Only call during the first frame of the pulse
                         if pulseElapsed < 0.02 then
+                            -- Ensure we pass the script input index (not the physical input)
                             if M.scriptManager then
                                 M.scriptManager.callScriptTrigger({
                                     input = scriptInputIdx
                                 })
                             else
-                                M.safeScriptCall(script.trigger, script, scriptInputIdx)
+                                -- Direct call with script input index
+                                M.safeScriptCall(script.trigger, script,
+                                                 scriptInputIdx)
                             end
                         end
                     end
@@ -208,9 +213,11 @@ function M.updateInputs(scriptInputAssignments, script)
         if inputClock[i] then
             -- Clock mode - generate gate signals based on BPM
             local phase = time % period
-            local baseValue = (phase < halfPeriod) and 5 or 0
+            -- Store current clock state (high or low)
+            local clockState = (phase < halfPeriod)
+            local baseValue = clockState and 5 or 0
             -- Apply scaling to the base value
-            currentInputs[i] = baseValue * scale
+            local newValue = baseValue * scale
 
             -- Process gate inputs by checking which script inputs this physical input is assigned to
             for scriptInputIdx, assignedPhysInput in pairs(
@@ -219,15 +226,22 @@ function M.updateInputs(scriptInputAssignments, script)
                     -- Found an assignment, check if it's a kGate
                     if type(script.inputs) == "table" and
                         script.inputs[scriptInputIdx] == kGate and script.gate then
-                        local prev = prevGateStates[i] or currentInputs[i]
-                        if prev ~= currentInputs[i] then
-                            local rising = (currentInputs[i] > prev)
+                        -- Get previous clock state (true = high, false = low)
+                        local prevClockState = prevGateStates[i] > 2.5
+                        -- Detect rising and falling edges based on clock state
+                        if prevClockState ~= clockState then
+                            -- Debug output to verify gate transitions
+                            local rising = clockState -- true when going from low to high
+
+                            -- We need to ensure the parameters are passed correctly and consistently
                             if M.scriptManager then
+                                -- For script manager version, ensure we're passing the parameters correctly
                                 M.scriptManager.callScriptGate({
                                     input = scriptInputIdx,
                                     rising = rising
                                 })
                             else
+                                -- Direct call - must ensure parameters are in the right order (script obj, input, rising)
                                 M.safeScriptCall(script.gate, script,
                                                  scriptInputIdx, rising)
                             end
@@ -236,7 +250,9 @@ function M.updateInputs(scriptInputAssignments, script)
                 end
             end
 
-            prevGateStates[i] = currentInputs[i]
+            -- Update values after all script inputs are processed
+            currentInputs[i] = newValue
+            prevGateStates[i] = newValue
         elseif inputType == kTrigger then
             -- Trigger input - show pulse when active
             if triggerPulseActive[i] then

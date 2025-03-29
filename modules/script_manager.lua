@@ -254,10 +254,11 @@ end
 -- Toggle script memory profiling
 function M.toggleScriptMemoryTracking()
     scriptMemoryTracking = not scriptMemoryTracking
-    
+
     if scriptMemoryTracking then
         script_utils.startScriptMemoryTracking()
-        print("Script memory profiling enabled - tracking step(), draw(), gate(), and trigger() functions")
+        print(
+            "Script memory profiling enabled - tracking step(), draw(), gate(), and trigger() functions")
     else
         -- Get report before stopping
         local report = script_utils.getScriptMemoryReport()
@@ -265,14 +266,12 @@ function M.toggleScriptMemoryTracking()
         script_utils.stopScriptMemoryTracking()
         return report
     end
-    
+
     return scriptMemoryTracking
 end
 
 -- Check if script memory tracking is enabled
-function M.isScriptMemoryTrackingEnabled()
-    return scriptMemoryTracking
-end
+function M.isScriptMemoryTrackingEnabled() return scriptMemoryTracking end
 
 -- Call the script's gate function with memory tracking
 function M.callScriptGate(params)
@@ -281,7 +280,8 @@ function M.callScriptGate(params)
     if scriptMemoryTracking then
         return script_utils.trackScriptGateMemory(script, params)
     else
-        return M.safeScriptCall(script.gate, script, params)
+        return
+            M.safeScriptCall(script.gate, script, params.input, params.rising)
     end
 end
 
@@ -292,7 +292,7 @@ function M.callScriptTrigger(params)
     if scriptMemoryTracking then
         return script_utils.trackScriptTriggerMemory(script, params)
     else
-        return M.safeScriptCall(script.trigger, script, params)
+        return M.safeScriptCall(script.trigger, script, params.input)
     end
 end
 

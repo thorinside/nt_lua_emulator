@@ -42,72 +42,71 @@ local origUpdateTime, origUpdateTriggers, origRender, origUpdateParams
 local function enableFunctionProfiling()
     -- Wrap important functions for memory profiling
     local functionsToProfile = {
-        "update",
-        "draw",
-        "updateTriggerPulses",
-        "loadScriptFromPath",
+        "update", "draw", "updateTriggerPulses", "loadScriptFromPath",
         "loadScriptFromPathWithData"
     }
-    
+
     -- Keep references to original functions
     local originalFunctions = {}
-    
+
     for _, funcName in ipairs(functionsToProfile) do
         if M[funcName] then
             originalFunctions[funcName] = M[funcName]
-            M[funcName] = debug_utils.createMemoryTrackingWrapper("emulator." .. funcName, M[funcName])
+            M[funcName] = debug_utils.createMemoryTrackingWrapper(
+                              "emulator." .. funcName, M[funcName])
         end
     end
-    
+
     -- Profile signal_processor functions
     if signalProcessor.updateTime then
         origUpdateTime = signalProcessor.updateTime
         signalProcessor.updateTime = debug_utils.createMemoryTrackingWrapper(
-            "signal_processor.updateTime", origUpdateTime)
+                                         "signal_processor.updateTime",
+                                         origUpdateTime)
     end
-    
+
     if signalProcessor.updateTriggerPulses then
         origUpdateTriggers = signalProcessor.updateTriggerPulses
-        signalProcessor.updateTriggerPulses = debug_utils.createMemoryTrackingWrapper(
-            "signal_processor.updateTriggerPulses", origUpdateTriggers)
+        signalProcessor.updateTriggerPulses =
+            debug_utils.createMemoryTrackingWrapper(
+                "signal_processor.updateTriggerPulses", origUpdateTriggers)
     end
-    
+
     -- Profile display functions
     if display.render then
         origRender = display.render
         display.render = debug_utils.createMemoryTrackingWrapper(
-            "display.render", origRender)
+                             "display.render", origRender)
     end
-    
+
     -- Profile parameter-related functions
     if parameterManager.updateParameters then
         origUpdateParams = parameterManager.updateParameters
-        parameterManager.updateParameters = debug_utils.createMemoryTrackingWrapper(
-            "parameterManager.updateParameters", origUpdateParams)
+        parameterManager.updateParameters =
+            debug_utils.createMemoryTrackingWrapper(
+                "parameterManager.updateParameters", origUpdateParams)
     end
-    
+
     -- Reset profiling - restore original functions
     return function()
         for funcName, origFunc in pairs(originalFunctions) do
             M[funcName] = origFunc
         end
-        
+
         if origUpdateTime then
             signalProcessor.updateTime = origUpdateTime
         end
-        
+
         if origUpdateTriggers then
             signalProcessor.updateTriggerPulses = origUpdateTriggers
         end
-        
-        if origRender then
-            display.render = origRender
-        end
-        
+
+        if origRender then display.render = origRender end
+
         if origUpdateParams then
             parameterManager.updateParameters = origUpdateParams
         end
-        
+
         debug_utils.debugLog("Function profiling disabled")
     end
 end
@@ -399,7 +398,10 @@ function M.load()
     love.graphics.setLineJoin("miter")
 
     -- Initialize signal processor
-    signalProcessor.init({safeScriptCall = safeScriptCall, scriptManager = scriptManager})
+    signalProcessor.init({
+        safeScriptCall = safeScriptCall,
+        scriptManager = scriptManager
+    })
 
     -- Initialize parameter manager
     parameterManager.init({helpers = helpers})
@@ -641,45 +643,50 @@ function M.update(dt)
     if not M.lastStepTime then M.lastStepTime = 0 end
     if not M.lastDrawTime then M.lastDrawTime = 0 end
     if not M.stepAccumulator then M.stepAccumulator = 0 end
-    
+
     -- Emulate hardware timing:
     -- step() called at ~1000Hz (every 1ms)
     -- draw() called at ~30Hz (every 33.33ms)
     local currentTime = love.timer.getTime()
     local stepInterval = 0.001 -- 1ms for 1000Hz step rate
     local drawInterval = 0.0333 -- 33.33ms for 30Hz draw rate
-    
+
     -- Accumulate time for step calls
     M.stepAccumulator = M.stepAccumulator + dt
-    
-    -- Update input values
-    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
-
-    -- Update automated parameters
-    parameterManager.updateAutomatedParameters(currentInputs,
-                                             signalProcessor.getInputPolarity())
 
     -- Create inputs table to pass to script.step
-    local scriptInputValues = signalProcessor.prepareScriptInputValues(
-                              scriptInputCount, scriptInputAssignments)
+    local scriptInputValues = {}
 
     -- Reset unconnected outputs
     signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
-    
+
     -- Call step as many times as needed to match 1000Hz
     local outputValues
     while M.stepAccumulator >= stepInterval do
+        -- Update input values for each step to check for gate transitions
+        currentInputs = signalProcessor.updateInputs(scriptInputAssignments,
+                                                     script)
+
+        -- Update automated parameters
+        parameterManager.updateAutomatedParameters(currentInputs,
+                                                   signalProcessor.getInputPolarity())
+
+        -- Prepare script input values for each step
+        scriptInputValues = signalProcessor.prepareScriptInputValues(
+                                scriptInputCount, scriptInputAssignments)
+
         -- Call the script's step function to update outputs
-        outputValues = scriptManager.callScriptStep(stepInterval, scriptInputValues)
-        
+        outputValues = scriptManager.callScriptStep(stepInterval,
+                                                    scriptInputValues)
+
         M.stepAccumulator = M.stepAccumulator - stepInterval
         M.lastStepTime = currentTime
     end
-    
+
     -- Update outputs with values from script
     if outputValues then
         currentOutputs = signalProcessor.updateOutputs(outputValues,
-                                                   scriptOutputAssignments)
+                                                       scriptOutputAssignments)
     end
 
     -- Send outputs via OSC
@@ -695,7 +702,7 @@ function M.update(dt)
         end
         osc_client.sendOutputs(oscOutputs)
     end
-    
+
     -- We'll leave the draw function call to Love2D's natural draw cycle
     -- but we'll only call scriptManager.callScriptDraw() at the correct rate
     -- by checking time in the draw function
@@ -710,15 +717,15 @@ function M.draw()
     -- Only update the display canvas at 30Hz rate to match hardware
     local currentTime = love.timer.getTime()
     local drawInterval = 0.0333 -- 33.33ms for 30Hz
-    
+
     -- Initialize lastDrawTime if not already set
     if not M.lastDrawTime then M.lastDrawTime = 0 end
-    
+
     -- Only clear and redraw the script content at 30Hz
     if currentTime - M.lastDrawTime >= drawInterval then
         -- 1) Set up the display canvas for script drawing
         display.clear()
-        
+
         -- Start drawing to display's canvas with clean state
         love.graphics.push("all")
         love.graphics.setCanvas(display.getConfig().canvas)
@@ -727,7 +734,7 @@ function M.draw()
         -- Draw script content to display canvas with error handling
         scriptManager.callScriptDraw()
         M.lastDrawTime = currentTime
-        
+
         -- Reset canvas state
         love.graphics.setCanvas()
         love.graphics.pop()
