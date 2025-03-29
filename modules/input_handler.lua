@@ -242,24 +242,6 @@ function M.mousepressed(x, y, button)
         end
     end
 
-    -- Check for right-click on physical inputs (for scaling)
-    if button == 2 then
-        -- Right-click on physical inputs
-        local inputPos = M.io_panel.getPhysicalInputPositions()
-        if inputPos then
-            for i, pos in ipairs(inputPos) do
-                local dx = lx - pos[1]
-                local dy = ly - pos[2]
-                if math.sqrt(dx * dx + dy * dy) <= 15 then
-                    -- Allow scaling for both normal and clock inputs
-                    scalingInput = i
-                    scaleDragStartY = ly
-                    return true
-                end
-            end
-        end
-    end
-
     -- Check parameter knobs
     if M.scriptParameters then
         local params = {
@@ -493,36 +475,8 @@ function M.mousemoved(x, y, dx, dy)
         end
     end
 
-    -- Handle scaling inputs with vertical drag
-    if scalingInput then
-        local deltaY = scaleDragStartY - ly
-
-        if M.inputClock[scalingInput] then
-            -- For clock inputs, modify the BPM instead of scaling
-            -- Use a less sensitive adjustment for BPM
-            local bpmDelta = deltaY * 1.0 -- Reduced from 2.0 to 1.0
-            local newBPM = M.clockBPM + bpmDelta
-            newBPM = math.max(M.minBPM, math.min(M.maxBPM, newBPM))
-
-            if newBPM ~= M.clockBPM then
-                M.clockBPM = newBPM
-                M.markMappingsChanged() -- Mark as changed when BPM changes
-            end
-        else
-            -- For normal inputs, adjust scaling as before
-            local newScale = M.inputScaling[scalingInput] +
-                                 (deltaY * scaleDragSensitivity)
-            newScale = math.max(0.0, math.min(1.0, newScale))
-
-            if newScale ~= M.inputScaling[scalingInput] then
-                M.inputScaling[scalingInput] = newScale
-                M.markMappingsChanged() -- Mark as changed when scaling changes
-            end
-        end
-
-        scaleDragStartY = ly
-        return true
-    end
+    -- Input scaling is now handled in wheelmoved function
+    -- scalingInput state var is still kept for tracking active input
 
     -- Handle pending press that could become a drag
     if pendingPress and not dragging then
@@ -600,11 +554,7 @@ function M.mousereleased(x, y, button)
     -- Clear BPM button held state
     if button == 1 and bpmButtonHeld then bpmButtonHeld = nil end
 
-    -- If we were scaling an input, stop now
-    if scalingInput then
-        scalingInput = nil
-        return true
-    end
+    -- Note: Input scaling is now handled by mouse wheel
 
     -- Handle pending press that didn't become a drag
     if pendingPress then
@@ -732,6 +682,51 @@ function M.wheelmoved(x, y)
 
     -- First check if controls handled the event
     if M.controls.wheelmoved(x, y) then return true end
+
+    -- Check if mouse is over a physical input for scaling
+    local inputPos = M.io_panel.getPhysicalInputPositions()
+    if inputPos then
+        for i, pos in ipairs(inputPos) do
+            local dx = lx - pos[1]
+            local dy = ly - pos[2]
+            if math.sqrt(dx * dx + dy * dy) <= 15 then
+                -- We're over a physical input, adjust its scaling with mouse wheel
+                if M.inputClock[i] then
+                    -- For clock inputs, modify the BPM
+                    local bpmDelta = y > 0 and 1 or -1
+                    if love.keyboard.isDown("lshift") or
+                        love.keyboard.isDown("rshift") then
+                        bpmDelta = bpmDelta * 0.1 -- Fine control with shift
+                    end
+
+                    local newBPM = M.clockBPM + bpmDelta
+                    newBPM = math.max(M.minBPM, math.min(M.maxBPM, newBPM))
+
+                    if newBPM ~= M.clockBPM then
+                        M.clockBPM = newBPM
+                        M.markMappingsChanged() -- Mark as changed when BPM changes
+                    end
+                else
+                    -- For normal inputs, adjust scaling
+                    local scaleDelta = y > 0 and 0.05 or -0.05
+                    if love.keyboard.isDown("lshift") or
+                        love.keyboard.isDown("rshift") then
+                        scaleDelta = scaleDelta * 0.2 -- Fine control with shift
+                    end
+
+                    local newScale = M.inputScaling[i] + scaleDelta
+                    newScale = math.max(0.0, math.min(1.0, newScale))
+
+                    if newScale ~= M.inputScaling[i] then
+                        M.inputScaling[i] = newScale
+                        M.markMappingsChanged() -- Mark as changed when scaling changes
+                    end
+                end
+
+                return true
+            end
+        end
+    end
 
     -- Find the knob under the cursor directly in this function
     -- rather than relying on mousemoved to set it

@@ -9,6 +9,20 @@ local bpmButtonPositions = {} -- Store BPM button positions
 
 local helpers = require("modules.helpers")
 
+-- Custom function to draw just the arc without radial lines
+local function drawArc(x, y, r, angle1, angle2, segments)
+    local i = angle1
+    local j = 0
+    local step = math.pi * 2 / segments
+
+    while i < angle2 do
+        j = angle2 - i < step and angle2 or i + step
+        love.graphics.line(x + (math.cos(i) * r), y - (math.sin(i) * r),
+                           x + (math.cos(j) * r), y - (math.sin(j) * r))
+        i = j
+    end
+end
+
 function io_panel.drawScriptIO(params)
     local script = params.script
     local font = params.font
@@ -22,10 +36,10 @@ function io_panel.drawScriptIO(params)
 
     -- Create a smaller font for labels
     local labelFont = love.graphics.newFont(9) -- Smaller font for labels (reduced from 10px)
-    
+
     -- Store original font to restore later
     local originalFont = love.graphics.getFont()
-    
+
     -- Set to the smaller font for labels
     love.graphics.setFont(labelFont)
 
@@ -58,8 +72,9 @@ function io_panel.drawScriptIO(params)
     local maxInputWidth = 0
     for i = 1, inputCount do
         inputNames[i] = helpers.getInputName(script, i)
-        wrappedInputNames[i] = helpers.wrapAndEllipsizeText(inputNames[i], labelFont,
-                                                    maxTextWidth, 2)
+        wrappedInputNames[i] = helpers.wrapAndEllipsizeText(inputNames[i],
+                                                            labelFont,
+                                                            maxTextWidth, 2)
         -- Calculate maximum width needed for this input's lines
         for _, line in ipairs(wrappedInputNames[i]) do
             maxInputWidth = math.max(maxInputWidth, labelFont:getWidth(line))
@@ -72,8 +87,9 @@ function io_panel.drawScriptIO(params)
 
     for i = 1, outputCount do
         outputNames[i] = helpers.getOutputName(script, i)
-        wrappedOutputNames[i] = helpers.wrapAndEllipsizeText(outputNames[i], labelFont,
-                                                     maxTextWidth, 2)
+        wrappedOutputNames[i] = helpers.wrapAndEllipsizeText(outputNames[i],
+                                                             labelFont,
+                                                             maxTextWidth, 2)
     end
 
     -- Draw Script Inputs title - centered in left third of window
@@ -143,7 +159,7 @@ function io_panel.drawScriptIO(params)
             -- Center multiple lines as a block with 1px offset
             textY = cy - (lineCount * fontHeight) / 2 - 1
         end
-        
+
         for j, line in ipairs(lines) do
             local x = cx - circleTextSpacing - circleRadius -
                           labelFont:getWidth(line)
@@ -203,7 +219,7 @@ function io_panel.drawScriptIO(params)
             -- Center multiple lines as a block with 1px offset
             textY = cy - (lineCount * fontHeight) / 2 - 1
         end
-        
+
         for j, line in ipairs(lines) do
             local x = cx - circleTextSpacing - circleRadius -
                           labelFont:getWidth(line)
@@ -232,7 +248,7 @@ function io_panel.drawScriptIO(params)
 
     -- Restore original font when done with IO panel
     love.graphics.setFont(originalFont)
-    
+
     return elementsY -- Return the Y position where elements start (after title)
 end
 
@@ -291,9 +307,25 @@ function io_panel.drawPhysicalIO(params)
             love.graphics.circle("line", cx, cy, circleRadius)
 
             if inputScaling and inputScaling[idx] ~= 1.0 then
-                love.graphics.setColor(1, 1, 1, 0.2)
-                local scaledRadius = circleRadius * inputScaling[idx]
-                love.graphics.circle("line", cx, cy, scaledRadius)
+                -- Draw a blue arc inside the circle to represent scaling
+                -- Calculate the arc angle based on the scaling factor (0 to 2*pi)
+                -- Rotate by 180 degrees (start at bottom/6 o'clock position)
+                local startAngle = math.pi / 2 -- Start at bottom (6 o'clock position)
+                local endAngle = startAngle + (2 * math.pi * inputScaling[idx])
+
+                -- Draw the blue arc with a slightly smaller radius than the main circle
+                local arcRadius = circleRadius - 3
+                love.graphics.setColor(0.2, 0.4, 1.0, 0.9)
+                love.graphics.setLineWidth(2)
+
+                -- Use the custom drawArc function to draw just the curved part
+                drawArc(cx, cy, arcRadius, startAngle, endAngle, 32)
+
+                -- Reset line width back to default
+                love.graphics.setLineWidth(1)
+
+                -- Reset color to white for the label text
+                love.graphics.setColor(1, 1, 1)
             end
 
             local label = tostring(idx)
