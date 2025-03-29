@@ -214,7 +214,8 @@ local function saveIOState(forceSave)
         oscEnabled = osc_client.isEnabled(), -- Save OSC enabled state
         clockBPM = signalProcessor.getClockBPM(), -- Save global clock BPM setting
         minimalMode = windowManager.isMinimalMode(), -- Save minimal mode state
-        activeOverlay = windowManager.getActiveOverlay() -- Save active overlay state
+        activeOverlay = windowManager.getActiveOverlay(), -- Save active overlay state
+        parameterAutomation = parameterManager.getParameterAutomation() -- Save CV mappings to parameter knobs
     }
 
     -- Convert input assignments to JSON-compatible format
@@ -277,6 +278,12 @@ local function loadIOState()
                 scriptOutputAssignments[idx] = physOutput
             end
         end
+    end
+
+    -- Apply parameter automation if present in the state
+    if state.parameterAutomation then
+        parameterManager.setParameterAutomation(state.parameterAutomation)
+        print("Parameter automation mappings restored from state file")
     end
 
     -- Apply input modes and scaling if present in the state
