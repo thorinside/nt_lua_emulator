@@ -900,6 +900,11 @@ function M.wheelmoved(x, y)
                 if newValue ~= sp.current then
                     sp.current = newValue
 
+                    -- If parameter is automated, also update baseValue
+                    if M.parameterAutomation and M.parameterAutomation[i] then
+                        sp.baseValue = newValue
+                    end
+
                     -- Update the script's parameters using the helper module
                     M.helpers.updateScriptParameters(M.scriptParameters,
                                                      M.script)

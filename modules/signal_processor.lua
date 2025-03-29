@@ -262,13 +262,14 @@ function M.updateInputs(scriptInputAssignments, script)
             end
         else
             -- CV mode - generate continuous values with sine waves
-            local baseValue = math.sin(time + i) * 10
+            local baseValue = math.sin(time + i)
 
             -- Clamp the base value to the range of the input polarity
             if inputPolarity[i] == kBipolar then
-                baseValue = baseValue - 5
+                baseValue = baseValue * 5.0
                 baseValue = math.max(-5, math.min(5, baseValue))
             else
+                baseValue = ((baseValue + 1.0) / 2.0) * 10.0
                 baseValue = math.max(0, math.min(10, baseValue))
             end
 
