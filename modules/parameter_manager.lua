@@ -143,17 +143,7 @@ function M.updateAutomatedParameters(currentInputs)
             -- Normalize the voltage by dividing by 12V
             local normalizedVoltage = voltage / 12.0
 
-            -- Apply voltage as an offset from base value
-            -- When voltage is +12V, parameter should be at max
-            -- When voltage is -12V, parameter should be at min
-            -- When voltage is 0V, parameter should be at baseValue
             local newValue = baseValue + (normalizedVoltage * paramRange)
-
-            -- Print debug info for this parameter
-            print(string.format(
-                      "Parameter %d: min=%d, max=%d, baseValue=%d, voltage=%.2f, normalizedVoltage=%.4f, newValue=%.2f",
-                      paramIndex, sp.min, sp.max, baseValue, voltage,
-                      normalizedVoltage, newValue))
 
             -- For integer parameters, round to nearest whole number
             if sp.type == "integer" then
@@ -176,12 +166,6 @@ function M.updateAutomatedParameters(currentInputs)
 
             -- Apply offset to base value
             local newIndex = baseValue + offset
-
-            -- Print debug info for enum parameter
-            print(string.format(
-                      "Enum Parameter %d: values=%d, baseValue=%d, voltage=%.2f, normalizedVoltage=%.4f, offset=%d, newIndex=%d",
-                      paramIndex, valueCount, baseValue, voltage,
-                      normalizedVoltage, offset, newIndex))
 
             -- Ensure the index is valid
             sp.current = math.max(1, math.min(valueCount, newIndex))

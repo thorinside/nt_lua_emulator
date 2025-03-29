@@ -132,9 +132,7 @@ end
 -- Helper function to wrap and ellipsize text
 function helpers.wrapAndEllipsizeText(text, font, maxWidth, maxLines)
     -- If the entire text fits in one line, just return it
-    if font:getWidth(text) <= maxWidth then
-        return {text}
-    end
+    if font:getWidth(text) <= maxWidth then return {text} end
 
     local words = {}
     for word in text:gmatch("%S+") do table.insert(words, word) end
@@ -164,18 +162,16 @@ function helpers.wrapAndEllipsizeText(text, font, maxWidth, maxLines)
                 currentLine = ""
                 currentWidth = 0
             end
-            
+
             -- Handle the long word by truncating it
             local truncatedWord = word
             while font:getWidth(truncatedWord) > maxWidth do
                 truncatedWord = truncatedWord:sub(1, -2)
             end
             truncatedWord = truncatedWord .. "..."
-            
+
             table.insert(lines, truncatedWord)
-            if #lines >= maxLines then
-                return lines
-            end
+            if #lines >= maxLines then return lines end
         else
             -- Normal word that fits within maxWidth
             if currentLine == "" then
