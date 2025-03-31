@@ -1,226 +1,173 @@
--- My Algorithm Name
 --[[
-  A brief description of what this algorithm does.
+Markov Chord Seq v1.15
+Generates 4-note (7th) chord progressions using Markov chains.
+Reverted to SATB voicing as preferred by user.
+Implements optional/randomized transition chords for key changes (delayed).
+Moved chord/voltage calculations out of step() into gate()/trigger().
+Outputs V/Oct on A/B/C/D.
+Uses kGate Clock (Input 1) and kTrigger Reset (Input 2).
 
-  You can use multi-line comments like this for longer descriptions,
-  including usage notes or help text for controls if needed.
+Scales: Major, Nat Minor, Harm Minor, Dorian, Phrygian, Phrygian Dom, etc.
+Matrices: Standard, Resolving, Wandering, Ambient, Minimal Cycle, etc.
+Transitions: V7, iv, bVII, dim7, Random
+]]
 
-  Example Help:
-  - Input 1: CV control for pitch (V/Oct)
-  - Input 2: Trigger input to fire envelope
-  - Pot 1: Controls Decay Time
---]]
+-- Helper function: MIDI note to V/Oct
+local function midi_note_to_volts(note) return (note - 60.0) / 12.0 end
 
--- Optional: Local variables specific to this script instance
--- local myStateVariable = 0
--- local myTable = {}
+-- Helper function: Note name from MIDI note
+local note_names = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }
+local function get_note_name(note) if note == nil then return "---" end; local o=math.floor(note/12)-1; local n=note_names[(note%12)+1]; return n .. o end
 
--- The main table returned by the script
+-- Helper function: Choose next Markov state
+local function select_next_state(probs) local r=math.random(); local c=0.0; for next_s, p in pairs(probs) do c=c+p; if r<c then return next_s end; end; local lk=1; for k,_ in pairs(probs) do lk=k end; return lk end
+
+-- Helper function: Apply SATB-style voicing (Restored)
+local function apply_voicing(close_notes)
+    if not close_notes or #close_notes ~= 4 then return {60, 60, 60, 60} end
+    local voiced_notes={};
+    -- Input: {close_root, close_3rd, close_5th, close_7th}
+    voiced_notes[1]=close_notes[1]-12; -- Bass = Root - Octave
+    voiced_notes[2]=close_notes[3];    -- Tenor = 5th
+    voiced_notes[3]=close_notes[2];    -- Alto = 3rd
+    voiced_notes[4]=close_notes[4];    -- Soprano = 7th
+    if voiced_notes[3]<voiced_notes[2] then voiced_notes[3]=voiced_notes[3]+12 end;
+    if voiced_notes[4]<voiced_notes[3] then voiced_notes[4]=voiced_notes[4]+12 end;
+    return voiced_notes
+end
+
+-- =======================
+-- Main Script Table
+-- =======================
 return {
-  -- == Required Metadata ==
-  name = "MyAlgoName", -- Short name, often matches the first comment line
-  author = "Your Name", -- Your name or alias
+    name = "Markov Chord Seq",
+    author = "AI Assistant & User",
 
-  -- == Initialization Function (Called once on script load) ==
-  init = function(self)
-    print(self.name .. ": init called") -- Use self.name for consistency
+    init = function(self)
+        -- Scale Definitions (Same)
+        self.scales = { ["Major"]={0, 2, 4, 5, 7, 9, 11},["Dorian"]={0, 2, 3, 5, 7, 9, 10},["Phrygian"]={0, 1, 3, 5, 7, 8, 10},["Lydian"]={0, 2, 4, 6, 7, 9, 11},["Mixolydian"]={0, 2, 4, 5, 7, 9, 10},["Nat Minor"]={0, 2, 3, 5, 7, 8, 10},["Locrian"]={0, 1, 3, 5, 6, 8, 10},["Harm Minor"]={0, 2, 3, 5, 7, 8, 11},["Phrygian Dom"]={0, 1, 4, 5, 7, 8, 10},["Hungarian Min"]={0, 2, 3, 6, 7, 8, 11},["Blues Hexa"]={0, 3, 5, 6, 7, 10},["Hirajoshi"]={0, 2, 3, 7, 8},["Miyako Bushi"]={0, 1, 5, 7, 8},["Prometheus"]={0, 2, 4, 6, 9, 10},["Whole Tone"]={0, 2, 4, 6, 8, 10},["Octatonic H-W"]={0, 1, 3, 4, 6, 7, 9, 10} }
+        self.scale_names = {}; local i=1; for name,_ in pairs(self.scales) do self.scale_names[i]=name; i=i+1; end; table.sort(self.scale_names)
 
-    -- Access state loaded from preset (if serialise is used)
-    if self.state then
-      print(self.name .. ": Found saved state")
-      -- TODO: Process self.state data if necessary
-      -- Example: myStateVariable = self.state.mySavedValue or 0
-    end
+        -- Markov Matrices (Same)
+        self.matrices = { ["Standard"]={[1]={[4]=0.4,[5]=0.3,[2]=0.15,[6]=0.15},[2]={[5]=0.6,[7]=0.3,[3]=0.1},[3]={[6]=0.6,[4]=0.3,[1]=0.1},[4]={[5]=0.5,[1]=0.2,[7]=0.15,[2]=0.15},[5]={[1]=0.6,[6]=0.2,[3]=0.1,[4]=0.1},[6]={[2]=0.5,[4]=0.3,[5]=0.2},[7]={[1]=0.7,[5]=0.3}},["Resolving"]={[1]={[4]=0.5,[5]=0.3,[2]=0.2},[2]={[5]=0.8,[7]=0.2},[3]={[6]=0.7,[4]=0.3},[4]={[1]=0.4,[5]=0.4,[2]=0.2},[5]={[1]=0.8,[6]=0.1,[3]=0.1},[6]={[2]=0.6,[5]=0.4},[7]={[1]=0.9,[5]=0.1}},["Wandering"]={[1]={[2]=0.3,[7]=0.3,[4]=0.2,[6]=0.2},[2]={[3]=0.4,[1]=0.3,[5]=0.2,[4]=0.1},[3]={[4]=0.4,[2]=0.3,[6]=0.2,[1]=0.1},[4]={[5]=0.4,[3]=0.3,[1]=0.15,[2]=0.15},[5]={[6]=0.4,[4]=0.3,[1]=0.1,[7]=0.2},[6]={[7]=0.4,[5]=0.3,[2]=0.15,[3]=0.15},[7]={[1]=0.4,[6]=0.3,[5]=0.15,[2]=0.15}},["Ambient"]={[1]={[1]=0.3,[4]=0.3,[2]=0.2,[6]=0.2},[2]={[2]=0.3,[5]=0.3,[4]=0.2,[1]=0.2},[3]={[3]=0.4,[6]=0.3,[4]=0.3},[4]={[4]=0.3,[1]=0.3,[5]=0.2,[2]=0.2},[5]={[5]=0.3,[1]=0.2,[4]=0.3,[6]=0.2},[6]={[6]=0.3,[2]=0.3,[4]=0.2,[5]=0.2},[7]={[7]=0.4,[1]=0.3,[5]=0.3}},["Minimal Cycle"]={[1]={[7]=0.4,[4]=0.4,[6]=0.2},[2]={[5]=0.9,[1]=0.1},[3]={[6]=0.9,[1]=0.1},[4]={[5]=0.5,[7]=0.3,[1]=0.2},[5]={[1]=0.6,[6]=0.4},[6]={[7]=0.5,[2]=0.5},[7]={[1]=0.5,[6]=0.5}},["Jazzish Cycle"]={[1]={[4]=0.5,[2]=0.3,[6]=0.2},[2]={[5]=0.8,[1]=0.1,[7]=0.1},[3]={[6]=0.7,[2]=0.3},[4]={[7]=0.5,[5]=0.2,[1]=0.15,[3]=0.15},[5]={[1]=0.7,[3]=0.15,[6]=0.15},[6]={[2]=0.7,[5]=0.3},[7]={[3]=0.6,[1]=0.2,[4]=0.2}},["Techno Minor"]={[1]={[6]=0.4,[7]=0.4,[4]=0.1,[1]=0.1},[2]={[1]=0.8,[5]=0.2},[3]={[6]=0.8,[1]=0.2},[4]={[1]=0.5,[7]=0.4,[5]=0.1},[5]={[1]=0.9,[6]=0.1},[6]={[7]=0.5,[1]=0.4,[6]=0.1},[7]={[1]=0.5,[6]=0.4,[7]=0.1}},["House Minor"]={[1]={[4]=0.5,[7]=0.3,[2]=0.1,[1]=0.1},[2]={[5]=0.7,[1]=0.3},[3]={[1]=0.8,[6]=0.2},[4]={[5]=0.4,[7]=0.4,[1]=0.2},[5]={[1]=0.8,[4]=0.2},[6]={[2]=0.6,[7]=0.4},[7]={[1]=0.6,[4]=0.3,[7]=0.1}},["Deep Modal"]={[1]={[2]=0.4,[4]=0.4,[7]=0.1,[1]=0.1},[2]={[5]=0.7,[4]=0.2,[1]=0.1},[3]={[2]=0.8,[6]=0.2},[4]={[5]=0.5,[2]=0.3,[1]=0.2},[5]={[1]=0.6,[2]=0.2,[4]=0.2},[6]={[2]=0.7,[5]=0.3},[7]={[1]=0.6,[4]=0.4}},["Static Drone"]={[1]={[1]=0.8,[4]=0.05,[5]=0.05,[7]=0.05,[2]=0.05},[2]={[1]=0.9,[2]=0.1},[3]={[1]=0.9,[3]=0.1},[4]={[1]=0.9,[4]=0.1},[5]={[1]=0.9,[5]=0.1},[6]={[1]=0.9,[6]=0.1},[7]={[1]=0.9,[7]=0.1}} }
+        self.matrix_names = {}; i=1; for name,_ in pairs(self.matrices) do self.matrix_names[i]=name; i=i+1; end; table.sort(self.matrix_names)
 
-    -- Define Inputs, Outputs, and Parameters
-    return {
-      -- == Inputs ==
-      -- Specify the number of inputs, or a table defining types for each input
-      inputs = 1, -- Example: One CV input
-      -- inputs = { kCV, kTrigger, kGate }, -- Example: CV, Trigger, Gate inputs
-      -- inputNames = { [1] = "Pitch CV", [2] = "Trig In", [3] = "Gate In" }, -- Optional: Custom names
+        -- State Variables
+        self.current_root = 0; self.current_scale_name = self.scale_names[1]; self.current_matrix_name = self.matrix_names[1]; self.current_scale_intervals = self.scales[self.current_scale_name]; self.current_matrix = self.matrices[self.current_matrix_name]; self.current_scale_degree = 1;
+        self.clock_step = 0;
 
-      -- == Outputs ==
-      -- Specify the number of outputs, or a table defining types (kStepped or kLinear)
-      outputs = 1, -- Example: One stepped output (default)
-      -- outputs = { kStepped, kLinear }, -- Example: One stepped, one linear output
-      -- outputNames = { "Main Out", "Aux Out" }, -- Optional: Custom names
+        -- Key Change State
+        self.target_root = nil; self.transition_type = "V7";
+        self.key_change_armed = false; self.is_playing_transition_chord = false;
 
-      -- == Parameters ==
-      -- Define script-specific parameters (optional)
-      parameters = {
-        -- Format 1: Integer parameter
-        { "Param 1 Int", -10, 10, 0, kVolts }, -- Name, Min, Max, Default, Unit
+        -- Phrase Tracking
+        self.master_clock_count = 0; self.phrase_length_clocks = 16;
 
-        -- Format 2: Float parameter (using scale)
-        { "Param 2 Float", 0, 1000, 100, kMs, kBy10 }, -- Name, Min, Max, Default, Unit, Scale (kBy10, kBy100, kBy1000) -> 0.0ms to 100.0ms, default 10.0ms
+        -- Clock Div Stuff
+        self.clock_division_options = {"1", "2", "3", "4", "6", "8", "12", "16", "24", "32"}; self.clock_division_values = { 1, 2, 3, 4, 6, 8, 12, 16, 24, 32}; self.clock_division_steps = self.clock_division_values[4];
 
-        -- Format 3: Enum parameter
-        { "Param 3 Enum", { "Option A", "Option B", "Option C" }, 1 } -- Name, {Enum Values Table}, Default Index (1-based)
-      },
-    }
-  end,
+        -- Previous Parameter Values Store
+        self.previous_parameters = { [1]=0, [2]=1, [3]=1, [4]=4, [5]=5 }
 
-  -- == Processing Function (Called every ~1ms if defined) ==
-  -- Use step for continuous processing based on time and CV inputs
-  --[[ -- Uncomment this block if you need step processing --
-  step = function(self, dt, inputs)
-    -- dt: Time elapsed since last step call (in seconds)
-    -- inputs: Table of current input voltages (1-based index)
+        -- Transition Type Definitions
+        self.transition_options_param = {"V7", "iv", "bVII", "dim7", "Random"}; self.transition_options = {"V7", "iv", "bVII", "dim7"};
 
-    -- Access parameter values (read-only access recommended here)
-    -- Note: Parameter indices are 1-based within self.parameters
-    -- local param1Value = self.parameters[1]
-    -- local param2Value = self.parameters[2] -- This will be a float
-    -- local enumChoice = self.parameters[3] -- This will be the index (1, 2, or 3)
+        -- Output Voltages Store & Flag
+        self.output_voltages = {0.0, 0.0, 0.0, 0.0}
+        self.voltages_updated_in_gate = true
 
-    -- TODO: Implement your core processing logic here
-    -- Example: Simple Sine LFO
-    -- self.phase = (self.phase or 0) + dt * (1 + inputs[1]) -- Freq modulated by Input 1
-    -- self.phase = self.phase % 1.0
-    -- local outputValue = math.sin(self.phase * 2 * math.pi) * 5.0 -- +/- 5V Sine
+        -- Calculate initial chord voltages RIGHT NOW in init using SATB voicing
+        local initial_notes_close = self.calculate_close_notes(self, self.current_scale_degree, false) -- false = is diatonic
+        local initial_notes_voiced = apply_voicing(initial_notes_close)
+        for i=1, 4 do self.output_voltages[i] = midi_note_to_volts(initial_notes_voiced[i] or 60) end
 
-    -- Return a table of output values (indexed by output number)
-    -- You only need to include outputs that changed.
-    -- return { [1] = outputValue }
-    return {} -- Return empty table if no outputs changed in this step
-  end,
-  --]]
+        -- I/O & Parameter Definitions
+        return {
+            inputs = { kGate, kTrigger }, outputs = { kLinear, kLinear, kLinear, kLinear },
+            inputNames = { [1] = "Clock", [2] = "Reset" },
+            outputNames = { [1]="Note 1 (Bass)",[2]="Note 2 (Tenor)",[3]="Note 3 (Alto)",[4]="Note 4 (Soprano)" }, -- Back to SATB names
+            parameters = { { "Root Note", 0, 11, 0, kMIDINote }, { "Scale", self.scale_names, 1 }, { "Matrix", self.matrix_names, 1 }, { "Clock Div", self.clock_division_options, 4 }, { "Transition", self.transition_options_param, 5 }, }
+        }
+    end,
 
-  -- == Trigger Input Handler (Called when a kTrigger input fires) ==
-  -- Use trigger for event-based processing
-  --[[ -- Uncomment this block if you have kTrigger inputs --
-  trigger = function(self, input)
-    -- input: Index (1-based) of the kTrigger input that fired
+    -- =======================
+    -- Central Chord Calculation Function - Returns CLOSE notes for voicing
+    -- =======================
+    calculate_close_notes = function(self, degree_or_root_midi, is_transition_chord_root)
+        local close_notes = {}
+        if is_transition_chord_root then
+            local chord_root_midi = degree_or_root_midi
+            local tt = self.transition_type -- Use local copy for checks
+            if tt == "V7" then close_notes = { chord_root_midi+0, chord_root_midi+4, chord_root_midi+7, chord_root_midi+10 }
+            elseif tt == "iv" then close_notes = { chord_root_midi+0, chord_root_midi+3, chord_root_midi+7, chord_root_midi+12 }
+            elseif tt == "bVII" then close_notes = { chord_root_midi+0, chord_root_midi+4, chord_root_midi+7, chord_root_midi+12 }
+            elseif tt == "dim7" then close_notes = { chord_root_midi+0, chord_root_midi+3, chord_root_midi+6, chord_root_midi+9 }
+            else close_notes = { chord_root_midi+0, chord_root_midi+4, chord_root_midi+7, chord_root_midi+10 } end -- Fallback V7
+        else -- Calculate diatonic 7th close notes
+            local degree = degree_or_root_midi; local scale = self.current_scale_intervals; local scale_len = #scale;
+            if scale_len == 0 then return {60,64,67,71} end; if degree < 1 or degree > scale_len then degree = 1 end;
+            local root_i=scale[degree]; local idx3=(degree+2-1)%scale_len+1; local idx5=(degree+4-1)%scale_len+1; local idx7=(degree+6-1)%scale_len+1;
+            local i3=scale[idx3]; local i5=scale[idx5]; local i7=scale[idx7];
+            if i3<root_i then i3=i3+12 end; if i5<root_i then i5=i5+12 end; if i7<root_i then i7=i7+12 end;
+            local base = 60 + self.current_root;
+            close_notes = { base + root_i, base + i3, base + i5, base + i7 }
+        end
+        return close_notes
+    end,
 
-    print(self.name .. ": Trigger received on input " .. input)
+    -- Removed old build_* functions
 
-    -- TODO: Implement logic to react to the trigger
-    -- Example: Reset phase or trigger an envelope
-    -- self.phase = 0
+    -- =======================
+    -- Gate Function - Calculates voltages directly using SATB voicing
+    -- =======================
+    gate = function(self, input, rising)
+        if input == 1 and rising then -- Clock Input Rising Edge
+            self.master_clock_count = (self.master_clock_count + 1); local phrase_end_reached = false; if self.master_clock_count >= self.phrase_length_clocks then self.master_clock_count = 0; phrase_end_reached = true; end;
+            self.clock_step = self.clock_step + 1; local chord_change_due = false; if self.clock_step >= self.clock_division_steps then self.clock_step = 0; chord_change_due = true; end;
+            local new_notes_calculated = false; local notes_close; local notes_voiced;
 
-    -- Optionally, return output values
-    -- return { [1] = 5.0 } -- Send a pulse on output 1
-    return {}
-  end,
-  --]]
+            if chord_change_due then
+                if self.is_playing_transition_chord then
+                    -- Resolve Key Change: Calculate new tonic chord
+                    self.current_root = self.target_root; self.target_root = nil; self.is_playing_transition_chord = false; self.key_change_armed = false; self.current_scale_degree = 1;
+                    notes_close = self.calculate_close_notes(self, self.current_scale_degree, false); notes_voiced = apply_voicing(notes_close);
+                    for i=1, 4 do self.output_voltages[i] = midi_note_to_volts(notes_voiced[i] or 60) end; new_notes_calculated = true;
 
-  -- == Gate Input Handler (Called when a kGate input changes state) ==
-  -- Use gate for processing based on gate high/low states
-  --[[ -- Uncomment this block if you have kGate inputs --
-  gate = function(self, input, rising)
-    -- input: Index (1-based) of the kGate input that changed
-    -- rising: Boolean, true if the gate just went high, false if it went low
+                elseif self.key_change_armed and phrase_end_reached then
+                     -- Trigger Transition Chord Calculation
+                     local target_tonic_midi = 60 + self.target_root; local trans_chord_root;
+                     if self.transition_type=="V7" then trans_chord_root=target_tonic_midi+7; elseif self.transition_type=="iv" then trans_chord_root=target_tonic_midi+5; elseif self.transition_type=="bVII" then trans_chord_root=target_tonic_midi+10; elseif self.transition_type=="dim7" then trans_chord_root=target_tonic_midi-1; else trans_chord_root=target_tonic_midi+7; self.transition_type = "V7"; end;
+                     notes_close = self.calculate_close_notes(self, trans_chord_root, true); notes_voiced = apply_voicing(notes_close);
+                     for i=1, 4 do self.output_voltages[i] = midi_note_to_volts(notes_voiced[i] or 60) end;
+                     self.is_playing_transition_chord = true; self.key_change_armed = false; new_notes_calculated = true;
 
-    if rising then
-      print(self.name .. ": Gate opened on input " .. input)
-      -- TODO: Implement logic for gate opening (e.g., start envelope attack)
-    else
-      print(self.name .. ": Gate closed on input " .. input)
-      -- TODO: Implement logic for gate closing (e.g., start envelope release)
-    end
+                elseif self.target_root == nil then -- Normal Markov Step
+                    local scale_len=#self.current_scale_intervals; if self.current_scale_degree<1 or self.current_scale_degree>scale_len then self.current_scale_degree=1 end; local probs_raw=self.current_matrix[self.current_scale_degree]; local valid_probs={}; local total_prob=0; if probs_raw and scale_len>0 then for d,p in pairs(probs_raw) do if d>=1 and d<=scale_len then valid_probs[d]=p; total_prob=total_prob+p; end; end; end; if total_prob>0 and math.abs(total_prob-1.0)>0.001 then for d,p in pairs(valid_probs) do valid_probs[d]=p/total_prob; end; end; if next(valid_probs)~=nil then self.current_scale_degree=select_next_state(valid_probs); else self.current_scale_degree=1; end;
+                    notes_close = self.calculate_close_notes(self, self.current_scale_degree, false); notes_voiced = apply_voicing(notes_close);
+                    for i=1, 4 do self.output_voltages[i] = midi_note_to_volts(notes_voiced[i] or 60) end; new_notes_calculated = true;
+                end
+            end
+            if new_notes_calculated then self.voltages_updated_in_gate = true end
+        end
+    end,
 
-    -- Optionally, return output values
-    -- local gateStateValue = rising and 5.0 or 0.0
-    -- return { [1] = gateStateValue }
-    return {}
-  end,
-  --]]
+    -- =======================
+    -- Trigger Function (Reset) - Calculates voltages directly using SATB
+    -- =======================
+    trigger = function(self, input)
+        if input == 2 then -- Reset Input
+            self.target_root = nil; self.key_change_armed = false; self.is_playing_transition_chord = false;
+            self.current_scale_degree = 1; self.clock_step = 0; self.master_clock_count = 0;
+            local notes_close = self.calculate_close_notes(self, self.current_scale_degree, false)
+            local notes_voiced = apply_voicing(notes_close)
+            for i=1, 4 do self.output_voltages[i] = midi_note_to_volts(notes_voiced[i] or 60) end
+            self.voltages_updated_in_gate = true
+        end
+    end,
 
-  -- == Drawing Function (Called every ~33ms / 30fps if defined) ==
-  --[[ -- Uncomment this block if you need a custom display --
-  draw = function(self)
-    -- Use drawXXX functions to create a custom display
-    -- Coordinates: (0,0) is top-left, display is 256x64 pixels
-    -- Colour: 0 (off) to 15 (fully lit)
+    -- Step Function (Minimal work - Same as v1.13)
+    step = function(self, dt, inputs) local param_changed=false; local current_root_param=self.parameters[1]; if current_root_param~=self.previous_parameters[1] then if self.target_root==nil then self.target_root=current_root_param; local trans_idx=self.parameters[5]; local sel_trans=self.transition_options_param[trans_idx]; if sel_trans=="Random" then local rand_idx=math.random(#self.transition_options); self.transition_type=self.transition_options[rand_idx]; else self.transition_type=sel_trans; end; self.key_change_armed=true; end; self.previous_parameters[1]=current_root_param; param_changed=true; end; local current_scale_idx=self.parameters[2]; if current_scale_idx~=self.previous_parameters[2] then self.current_scale_name=self.scale_names[current_scale_idx]; self.current_scale_intervals=self.scales[self.current_scale_name]; if self.target_root==nil and self.current_scale_degree>#self.current_scale_intervals then self.current_scale_degree=1 end; self.previous_parameters[2]=current_scale_idx; param_changed=true; end; local current_matrix_idx=self.parameters[3]; if current_matrix_idx~=self.previous_parameters[3] then self.current_matrix_name=self.matrix_names[current_matrix_idx]; self.current_matrix=self.matrices[self.current_matrix_name]; self.previous_parameters[3]=current_matrix_idx; param_changed=true; end; local current_clock_div_idx=self.parameters[4]; if current_clock_div_idx~=self.previous_parameters[4] then local idx=current_clock_div_idx; if idx and idx>=1 and idx<=#self.clock_division_values then self.clock_division_steps=self.clock_division_values[idx]; else self.clock_division_steps=self.clock_division_values[4]; end; self.clock_step=0; self.previous_parameters[4]=current_clock_div_idx; param_changed=true; end; local current_transition_idx=self.parameters[5]; if current_transition_idx~=self.previous_parameters[5] then self.previous_parameters[5]=current_transition_idx; param_changed=true; if self.transition_options_param[current_transition_idx]~="Random" then self.transition_type=self.transition_options_param[current_transition_idx]; end; end; if self.voltages_updated_in_gate then self.voltages_updated_in_gate=false; return self.output_voltages; else return nil; end end,
 
-    -- Example: Draw some text
-    drawText(10, 30, "My Custom Display!", 15)
-
-    -- Example: Accessing parameters for display
-    -- Remember self.parameterOffset when using global parameter functions!
-    -- local algIdx = getCurrentAlgorithm()
-    -- local currentGlobalParamIdx = getCurrentParameter(algIdx)
-    -- local currentScriptParamIdx = currentGlobalParamIdx - self.parameterOffset
-    -- if self.parameters[currentScriptParamIdx] then
-    --   drawText(10, 45, "Param " .. currentScriptParamIdx .. ": " .. self.parameters[currentScriptParamIdx], 12)
-    -- end
-
-    -- Return true to hide the default parameter line at the top
-    -- return true
-    -- Return false or nil to show the default parameter line
-    return false
-  end,
-  --]]
-
-  -- == Custom UI Flag (Optional) ==
-  --[[ -- Uncomment this block if providing custom UI handlers --
-  ui = function(self)
-    -- Return true if this script handles UI events directly
-    -- (pots, encoders, buttons) via the functions below.
-    -- If true, setupUi and the relevant handlers should usually be defined.
-    return true
-  end,
-  --]]
-
-  -- == Custom UI Setup (Called when UI becomes active if ui() returns true) ==
-  --[[ -- Uncomment this block if ui() returns true and pots are used --
-  setupUi = function(self)
-    print(self.name .. ": setupUi called")
-    -- Required for soft takeover if pots have custom behaviour.
-    -- Get the current internal state corresponding to pots.
-    -- TODO: Replace with your actual state variable(s) mapped to pots
-    local pot1InternalValue = self.myPot1ControlledValue or 0
-    local pot2InternalValue = self.myPot2ControlledValue or 0
-    local pot3InternalValue = self.myPot3ControlledValue or 0
-
-    -- Return a table mapping pot index to its current value (0.0 - 1.0)
-    local potSyncValues = {}
-    -- Example: Map internal value (0-100) back to 0.0-1.0 for pot 1
-    potSyncValues[1] = pot1InternalValue / 100.0
-    -- potSyncValues[2] = pot2InternalValue / 10.0 -- Example if range is 0-10
-    -- potSyncValues[3] = pot3InternalValue -- Example if range is already 0.0-1.0
-
-    return potSyncValues
-  end,
-  --]]
-
-  -- == Custom UI Event Handlers (Optional, requires ui() to return true) ==
-  -- Define functions for the UI events you want to handle.
-  -- See UI Script template (or Disting NT manual pp. 16-17) for the full list and function signatures.
-  --[[ -- Uncomment and implement handlers as needed if ui() returns true --
-  pot1Turn = function(self, value)
-    -- value is 0.0 to 1.0
-    print(self.name .. ": Pot 1 turned to " .. value)
-    -- TODO: Handle pot 1 turn
-    -- Example: self.myPot1ControlledValue = math.floor(value * 100 + 0.5)
-    -- If directly controlling a parameter, you might use setParameterNormalized
-    -- Note: Parameter indices need self.parameterOffset for global functions
-    -- local algIdx = getCurrentAlgorithm()
-    -- local paramIdx = 1 -- Assuming Param 1 Int from above
-    -- setParameterNormalized(algIdx, self.parameterOffset + paramIdx, value)
-  end,
-
-  button1Push = function(self)
-    -- TODO: Handle button 1 push
-    print(self.name .. ": Button 1 pushed")
-  end,
-  --]]
-
-  -- == Serialization Function (Called when saving preset) ==
-  --[[ -- Uncomment this block if you need to save state with presets --
-  serialise = function(self)
-    print(self.name .. ": serialise called")
-    -- Create a table containing data to save in the preset (JSON-friendly)
-    local stateToSave = {}
-    -- TODO: Add script state to save
-    -- stateToSave.myValue = myStateVariable
-    -- stateToSave.someSetting = self.parameters[3] -- Example: save enum choice index
-    -- stateToSave.complexData = { list = {1, 2, 3}, flag = true }
-
-    -- This table will be available as self.state in the init function when loaded
-    return stateToSave
-  end,
-  --]]
-
-} -- End of main return table
+    -- Draw Function (Unchanged display logic - Same as v1.13)
+    draw = function(self) local root_name=note_names[self.current_root+1]; local scale_name=self.current_scale_name; local matrix_name=self.current_matrix_name; local degree=self.current_scale_degree; local chord_notes_volts=self.output_voltages; local y=18; local x=10; local lh=9; local root_display=root_name; local degree_display; local roman_map={[1]="I",[2]="II",[3]="III",[4]="IV",[5]="V",[6]="VI",[7]="VII"}; local deg_rom=roman_map[degree] or tostring(degree); if self.key_change_armed then root_display=root_name.." Arm>"..note_names[self.target_root+1]; degree_display=deg_rom.." (Wait)"; elseif self.is_playing_transition_chord then root_display=root_name.." >"..note_names[self.target_root+1]; local tt=self.transition_type; if tt=="V7" then degree_display="V7/"..roman_map[1] elseif tt=="iv" then degree_display="iv/"..roman_map[1] elseif tt=="bVII" then degree_display="bVII/"..roman_map[1] elseif tt=="dim7" then degree_display="vii°7/"..roman_map[1] else degree_display="?/"..roman_map[1] end else degree_display=deg_rom end; drawText(x,y,"Root: "..root_display.." Scale: "..scale_name); y=y+lh; local clk_idx=self.parameters[4]; local clk_txt="???"; if clk_idx and type(clk_idx)=="number" and clk_idx>=1 and clk_idx<=#self.clock_division_options then clk_txt=self.clock_division_options[clk_idx]; else local def_idx=4; if def_idx>=1 and def_idx<=#self.clock_division_options then clk_txt=self.clock_division_options[def_idx] .. "?"; end; end; local trans_idx=self.parameters[5]; local trans_txt=self.transition_options_param[trans_idx] or "???"; drawText(x,y,"Matrix: "..matrix_name.." Div: 1/"..clk_txt .. " Tr: "..trans_txt); y=y+lh; drawText(x,y,"Degree: "..degree_display.." MClk: "..self.master_clock_count.."/"..self.phrase_length_clocks); y=y+lh+2; drawText(x,y,"Chord:"); if chord_notes_volts then local notes_to_draw={}; for i=1,4 do notes_to_draw[i]=math.floor(chord_notes_volts[i]*12+60.5) end; for i=1,4 do local nd=get_note_name(notes_to_draw[i]); drawText(x+50+(i-1)*45,y,nd,12); end; else drawText(x+50,y,"...",10); end; return false; end
+} -- End of main returned table

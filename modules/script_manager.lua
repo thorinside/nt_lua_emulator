@@ -212,9 +212,16 @@ function M.callScriptStep(dt, inputValues)
     if not script or not script.step then return nil end
 
     if scriptMemoryTracking then
-        return script_utils.trackScriptStepMemory(script, dt, inputValues)
+        -- When memory tracking is enabled, make sure we preserve nil returns
+        local result = script_utils.trackScriptStepMemory(script, dt,
+                                                          inputValues)
+        -- Ensure nil is passed through correctly
+        return result
     else
-        return M.safeScriptCall(script.step, script, dt, inputValues)
+        -- When directly calling safeScriptCall, make sure nil returns are handled correctly
+        local result = M.safeScriptCall(script.step, script, dt, inputValues)
+        -- Ensure nil is passed through correctly
+        return result
     end
 end
 

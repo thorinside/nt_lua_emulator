@@ -189,6 +189,8 @@ local function safeScriptCall(func, scriptObj, ...)
         showErrorNotification("Script error: " .. tostring(result))
         return nil
     end
+
+    -- Return the result as is, including nil, to preserve the script's intended return value
     return result
 end
 
@@ -690,10 +692,14 @@ function M.update(dt)
     end
 
     -- Update outputs with values from script
-    if outputValues then
+    -- Check if outputValues is a valid table - if it's nil or not a table,
+    -- we keep the previous output values unchanged
+    if outputValues and type(outputValues) == "table" then
         currentOutputs = signalProcessor.updateOutputs(outputValues,
                                                        scriptOutputAssignments)
     end
+    -- If outputValues is nil or not a table, we don't update the outputs,
+    -- effectively keeping the previous values
 
     -- Send outputs via OSC
     if scriptOutputCount > 0 then

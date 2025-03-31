@@ -317,7 +317,9 @@ end
 
 -- Update outputs with values from script
 function M.updateOutputs(outputValues, scriptOutputAssignments)
-    if type(outputValues) ~= "table" then return false end
+    -- If outputValues is not a table, just return current outputs unchanged
+    -- This supports the behavior where returning nil keeps previous values
+    if type(outputValues) ~= "table" then return currentOutputs end
 
     for slot, value in ipairs(outputValues) do
         if value ~= nil then

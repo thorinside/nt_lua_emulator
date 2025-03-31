@@ -145,7 +145,7 @@ function script_utils.trackScriptStepMemory(scriptObj, dt, inputs)
     scriptMemoryTracking.stepMemory.totalMemoryBefore =
         scriptMemoryTracking.stepMemory.totalMemoryBefore + memoryBefore
 
-    -- Call the script's step function
+    -- Call the script's step function and capture its result, including nil returns
     local result = scriptObj.step(scriptObj, dt, inputs)
 
     local statsAfter = getMemoryStats()
@@ -182,6 +182,7 @@ function script_utils.trackScriptStepMemory(scriptObj, dt, inputs)
                                  memoryImpact))
     end
 
+    -- Return the result as is, which could be nil, table, or any other Lua value
     return result
 end
 
