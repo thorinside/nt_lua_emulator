@@ -1,61 +1,63 @@
-name-template: 'v$RESOLVED_VERSION'
-tag-template: 'v$RESOLVED_VERSION'
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
 categories:
-  - title: '🚀 Features'
+  - title: "🚀 Features"
     labels:
-      - 'feat'
-      - 'feature'
-      - 'enhancement'
-  - title: '🐛 Bug Fixes'
+      - "feat"
+      - "feature"
+      - "enhancement"
+  - title: "🐛 Bug Fixes"
     labels:
-      - 'fix'
-      - 'bugfix'
-      - 'bug'
-  - title: '🧰 Maintenance'
+      - "fix"
+      - "bugfix"
+      - "bug"
+  - title: "🧰 Maintenance"
     labels:
-      - 'chore'
-      - 'docs'
-      - 'doc'
-      - 'refactor'
-      - 'test'
-      - 'tests'
-      - 'ci'
-      - 'style'
-      - 'perf'
-change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+      - "chore"
+      - "docs"
+      - "doc"
+      - "refactor"
+      - "test"
+      - "tests"
+      - "ci"
+      - "style"
+      - "perf"
+  - title: "⚙️ Other Changes"
+
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
 template: |
   ## Changes
 
   $CHANGES
-  
+
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
 
 autolabeler:
-  - label: 'feat'
+  - label: "feat"
     title:
       - '/^feat(\(.+\))?:/i'
-  - label: 'fix'
+  - label: "fix"
     title:
       - '/^fix(\(.+\))?:/i'
-  - label: 'chore'
+  - label: "chore"
     title:
       - '/^chore(\(.+\))?:/i'
-  - label: 'refactor'
+  - label: "refactor"
     title:
       - '/^refactor(\(.+\))?:/i'
-  - label: 'docs'
+  - label: "docs"
     title:
       - '/^docs(\(.+\))?:/i'
-  - label: 'test'
+  - label: "test"
     title:
       - '/^test(\(.+\))?:/i'
-  - label: 'style'
+  - label: "style"
     title:
       - '/^style(\(.+\))?:/i'
-  - label: 'perf'
+  - label: "perf"
     title:
       - '/^perf(\(.+\))?:/i'
-  - label: 'ci'
+  - label: "ci"
     title:
-      - '/^ci(\(.+\))?:/i' 
+      - '/^ci(\(.+\))?:/i'
