@@ -213,6 +213,13 @@ end
 
 -- Mouse pressed event handler
 function M.mousepressed(x, y, button)
+    -- First, check if the notification system handled the click (e.g., closing an error dialog)
+    if M.notifications and M.notifications.mousepressed then
+        if M.notifications.mousepressed(x, y, button) then
+            return true -- Click was handled by notifications, stop processing here
+        end
+    end
+
     -- Calculate scaled coordinates for other UI elements
     local lx = x / M.uiScaleFactor
     local ly = y / M.uiScaleFactor
