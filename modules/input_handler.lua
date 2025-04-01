@@ -2,6 +2,9 @@
 -- Module for handling mouse and input events in the emulator
 local M = {} -- Module table
 
+-- Helper function for sign (Lua 5.1/5.2 compatibility)
+local function sign(x) return x > 0 and 1 or (x < 0 and -1 or 0) end
+
 -- Local state variables
 local dragging = false
 local dragType = nil
@@ -39,11 +42,16 @@ local scalingInput = nil
 local scaleDragStartY = 0
 local scaleDragSensitivity = 0.1
 
+-- Enum wheel accumulator
+local enumWheelAccumulator = 0
+local enumAccumulatorIndex = nil -- Which knob index the accumulator applies to
+
 -- Active elements
 local activeKnob = nil -- Currently hovered knob for mouse wheel control
 
 -- Pending click actions
 local pendingClickActions = {}
+local parameterTargetValues = {} -- Table to store target values for smoothing
 
 -- Initialize the module with required dependencies
 function M.init(deps)
@@ -73,6 +81,7 @@ function M.init(deps)
     activeKnob = nil
     M.activeKnob = nil
     pendingClickActions = {}
+    parameterTargetValues = {} -- Reset target values on init
 
     -- Set default UI scale factor
     M.uiScaleFactor = 1.0
@@ -137,40 +146,68 @@ function M.updatePendingClicks(currentTime)
         bpmNextRepeatTime = currentTime + bpmRepeatInterval
     end
 
-    local i = 1
-    while i <= #pendingClickActions do
-        local action = pendingClickActions[i]
+    -- Add parameter smoothing logic
+    local smoothingAlpha = 0.2 -- Tunable smoothing factor (lower = smoother, slower)
+    local smoothingThreshold = 0.005 -- Stop smoothing when difference is small (relative to range for floats?)
+    local paramsChanged = false
 
-        if currentTime >= action.executeAfter then
-            -- Time to execute this action
-            if action.type == "cycleInputMode" then
-                local inputIdx = action.inputIndex
+    if M.scriptParameters and parameterTargetValues then
+        for i, targetValue in pairs(parameterTargetValues) do
+            local sp = M.scriptParameters[i]
+            if sp then
+                local currentValue = sp.current
+                local diff = targetValue - currentValue
+                -- Define a threshold to stop smoothing (e.g., 1% of a step or a small absolute value)
+                local snapThreshold = 0.01 -- Threshold for floats
 
-                -- Execute the mode cycling logic
-                if M.inputPolarity[inputIdx] == kBipolar and
-                    not M.inputClock[inputIdx] then
-                    -- From bipolar -> clock mode
-                    M.inputClock[inputIdx] = true
-                    M.markMappingsChanged() -- Mark as changed when mode changes
-                elseif M.inputClock[inputIdx] then
-                    -- From clock -> unipolar mode
-                    M.inputClock[inputIdx] = false
-                    M.inputPolarity[inputIdx] = kUnipolar
-                    M.markMappingsChanged() -- Mark as changed when mode changes
+                if math.abs(diff) > snapThreshold then
+                    local smoothedValue =
+                        smoothingAlpha * targetValue + (1 - smoothingAlpha) *
+                            currentValue
+
+                    -- Apply type-specific rounding/clamping AFTER smoothing
+                    -- Smoothing only applies to float types
+                    smoothedValue = math.max(sp.min,
+                                             math.min(sp.max, smoothedValue))
+
+                    -- Update only if the smoothed value actually changes the effective value (especially for int/enum)
+                    if smoothedValue ~= currentValue then
+                        sp.current = smoothedValue
+                        paramsChanged = true
+
+                        -- If parameter is automated, also update baseValue
+                        if M.parameterAutomation and M.parameterAutomation[i] then
+                            sp.baseValue = smoothedValue
+                        end
+                    end
                 else
-                    -- From unipolar -> bipolar (default)
-                    M.inputPolarity[inputIdx] = kBipolar
-                    M.inputClock[inputIdx] = false
-                    M.markMappingsChanged() -- Mark as changed when mode changes
-                end
-            end
+                    -- Difference is small, snap to target and remove from smoothing list
+                    local finalValue = targetValue -- Start with the exact target
 
-            -- Remove this action
-            table.remove(pendingClickActions, i)
-        else
-            -- Skip to next action
-            i = i + 1
+                    -- Apply final rounding/clamping for integer/enum types
+                    -- Snap float value
+                    finalValue = math.max(sp.min, math.min(sp.max, finalValue))
+
+                    -- Update only if the final snapped value is different
+                    if finalValue ~= currentValue then
+                        sp.current = finalValue
+                        paramsChanged = true
+
+                        if M.parameterAutomation and M.parameterAutomation[i] then
+                            sp.baseValue = sp.current
+                        end
+                    end
+                    parameterTargetValues[i] = nil -- Stop smoothing for this parameter
+                end
+            else
+                parameterTargetValues[i] = nil -- Remove target if parameter doesn't exist anymore
+            end
         end
+    end
+
+    -- Update script parameters if any changes were made during smoothing
+    if paramsChanged then
+        M.helpers.updateScriptParameters(M.scriptParameters, M.script)
     end
 end
 
@@ -752,160 +789,170 @@ function M.wheelmoved(x, y)
             local hitRadius = M.paramKnobRadius * M.uiScaleFactor * 1.5
             if dx * dx + dy * dy <= hitRadius * hitRadius then
                 local step = 1
+                local direction = y > 0 and 1 or (y < 0 and -1 or 0) -- Normalize wheel direction
+                local fineControlMultiplier = 0.1 -- Use 10% step for fine control
+                local newValue = sp.current -- Initialize with current value
 
                 -- Adjust step size based on parameter type
                 if sp.type == "float" then
-                    if sp.scale == kBy10 then
-                        -- For kBy10, use step of 1.0 in display units (10 in raw values)
-                        step = 10.0
-                        -- Apply the step in the appropriate direction
-                        newValue = sp.current + (y > 0 and step or -step)
-                        -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or
-                            love.keyboard.isDown("rshift") then
-                            newValue = sp.current + (y > 0 and 1.0 or -1.0) -- Smaller step for fine control
-                        end
-                        -- Clamp between min and max
-                        newValue = math.max(sp.min, math.min(sp.max, newValue))
-                    elseif sp.scale == kBy100 then
-                        -- For kBy100, use step of 1.0 in display units (100 in raw values)
-                        step = 100.0
-                        -- Apply the step in the appropriate direction
-                        newValue = sp.current + (y > 0 and step or -step)
-                        -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or
-                            love.keyboard.isDown("rshift") then
-                            newValue = sp.current + (y > 0 and 10.0 or -10.0) -- Smaller step for fine control
-                        end
-                        -- Clamp between min and max
-                        newValue = math.max(sp.min, math.min(sp.max, newValue))
-                    elseif sp.scale == kBy1000 then
-                        -- For kBy1000, use step of 1.0 in display units (1000 in raw values)
-                        step = 1000.0
-                        -- Apply the step in the appropriate direction
-                        newValue = sp.current + (y > 0 and step or -step)
-                        -- Hold SHIFT key to make more precise adjustments
-                        if love.keyboard.isDown("lshift") or
-                            love.keyboard.isDown("rshift") then
-                            newValue = sp.current + (y > 0 and 100.0 or -100.0) -- Smaller step for fine control
-                        end
-                        -- Clamp between min and max
-                        newValue = math.max(sp.min, math.min(sp.max, newValue))
-                    else
-                        -- For default float parameters, use a normalized continuous approach
-                        local range = sp.max - sp.min
-
-                        -- Calculate movement factor based on range
-                        -- For larger ranges, use smaller movements per wheel step
-                        local movementFactor = math.max(0.005, 0.1 / range)
-
-                        -- Get current normalized position (0.0 to 1.0)
-                        local currentNormalized = (sp.current - sp.min) / range
-
-                        -- Apply the wheel movement
-                        currentNormalized = currentNormalized +
-                                                (y * movementFactor)
-
-                        -- Clamp the normalized value
-                        currentNormalized =
-                            math.max(0.0, math.min(1.0, currentNormalized))
-
-                        -- Convert back to actual value
-                        newValue = sp.min + (currentNormalized * range)
-
-                        -- Hold SHIFT key for more precise control
-                        if love.keyboard.isDown("lshift") or
-                            love.keyboard.isDown("rshift") then
-                            -- Much finer control with shift
-                            newValue = sp.current + (y > 0 and 0.05 or -0.05)
-                        end
-
-                        -- Clamp to parameter range
-                        newValue = math.max(sp.min, math.min(sp.max, newValue))
-                    end
-                elseif sp.type == "integer" then
-                    -- For integer parameters, use a normalized continuous approach like enums
                     local range = sp.max - sp.min
+                    if range <= 0 then range = 1 end -- Avoid division by zero for fixed values
 
-                    -- Calculate movement factor based on range
-                    -- For larger ranges, use smaller movements per wheel step
-                    local movementFactor = math.max(0.005, 0.1 / range)
+                    if sp.scale == kBy10 then
+                        step = 10.0 -- Corresponds to 1.0 display unit change
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            step = 1.0 -- Fine control: 0.1 display unit change
+                        end
+                        newValue = sp.current + direction * step
+                    elseif sp.scale == kBy100 then
+                        step = 100.0 -- Corresponds to 1.0 display unit change
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            step = 10.0 -- Fine control: 0.1 display unit change
+                        end
+                        newValue = sp.current + direction * step
+                    elseif sp.scale == kBy1000 then
+                        step = 1000.0 -- Corresponds to 1.0 display unit change
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            step = 100.0 -- Fine control: 0.1 display unit change
+                        end
+                        newValue = sp.current + direction * step
+                    else
+                        -- Default float: Step is a small percentage of the range
+                        step = range * 0.01 -- 1% of range per wheel click
+                        if step == 0 then step = 0.01 end -- Minimum step if range is very small or 0
 
-                    -- Get current normalized position (0.0 to 1.0)
-                    local currentNormalized = (sp.current - sp.min) / range
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            step = step * fineControlMultiplier -- Fine control
+                        end
+                        newValue = sp.current + direction * step
+                    end
+                    -- Clamp float value
+                    newValue = math.max(sp.min, math.min(sp.max, newValue))
 
-                    -- Apply the wheel movement
-                    currentNormalized = currentNormalized + (y * movementFactor)
+                elseif sp.type == "integer" then
+                    step = 1 -- Step by 1 for integers
+                    local largeStep = 5 -- Larger step for shift+scroll on integers
 
-                    -- Clamp the normalized value
-                    currentNormalized = math.max(0.0, math.min(1.0,
-                                                               currentNormalized))
-
-                    -- Convert back to actual value
-                    -- Don't round - allow smooth continuous movement between values
-                    newValue = sp.min + (currentNormalized * range)
-
-                    -- Hold SHIFT key for more precise control
                     if love.keyboard.isDown("lshift") or
                         love.keyboard.isDown("rshift") then
-                        -- Much finer control with shift
-                        newValue = sp.current + (y > 0 and 0.2 or -0.2)
+                        -- Shift IS down: Use larger step if range is wide
+                        if (sp.max - sp.min) > 10 then
+                            step = largeStep
+                        end
+                        -- Note: step remains 1 if range is small
+                    else
+                        -- Shift IS NOT down: Use standard step (already 1)
+                        -- No change needed, step defaults to 1
                     end
 
-                    -- Clamp to parameter range
+                    -- Calculate new value using the determined step
+                    newValue = sp.current + direction * step
+
+                    -- Clamp integer value first
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
+                    -- Then round to nearest integer
+                    newValue = math.floor(newValue + 0.5)
+
+                    -- Update Integer parameters directly (no smoothing for discrete steps)
+                    if newValue ~= sp.current then
+                        sp.current = newValue
+                        -- If parameter is automated, also update baseValue
+                        if M.parameterAutomation and M.parameterAutomation[i] then
+                            sp.baseValue = newValue
+                        end
+                        -- Update the script's parameters using the helper module
+                        M.helpers.updateScriptParameters(M.scriptParameters,
+                                                         M.script)
+                    end
+
                 elseif sp.type == "enum" then
-                    -- For enum parameters, use a normalized approach with continuous movement
                     if sp.values then
                         local totalValues = #sp.values
+                        local changedEnum = false -- Flag to track if enum value actually changes
+                        if totalValues > 0 then
+                            step = 1 -- Step by 1 index
+                            -- Always step by 1 for enums, remove shift modifier sensitivity
 
-                        -- Calculate how much to move based on wheel delta and enum count
-                        -- More items = smaller movements per step, fewer items = larger movements
-                        local movementFactor =
-                            math.max(0.05, 0.15 / totalValues) -- Adjusted based on number of options
+                            -- Accumulator Logic
+                            if enumAccumulatorIndex ~= i or
+                                (direction ~= 0 and sign(direction) ~=
+                                    sign(enumWheelAccumulator)) then
+                                -- Reset accumulator if knob changes or direction reverses
+                                enumWheelAccumulator = 0
+                                enumAccumulatorIndex = i
+                            end
 
-                        -- Get the current position as a normalized value (0.0 to 1.0)
-                        -- Subtract 1 because enum indices start at 1 in Lua
-                        local currentNormalized = (sp.current - 1) /
-                                                      (totalValues - 1)
+                            if direction ~= 0 then
+                                enumWheelAccumulator =
+                                    enumWheelAccumulator + direction
+                            end
 
-                        -- Apply the wheel movement as a normalized adjustment
-                        -- The y value is flipped for intuitive direction (up = increase)
-                        currentNormalized = currentNormalized +
-                                                (y * movementFactor)
+                            -- Only trigger change if accumulator threshold is met
+                            local triggerThreshold = 2
+                            local actualDirection = 0
+                            if math.abs(enumWheelAccumulator) >=
+                                triggerThreshold then
+                                actualDirection = sign(enumWheelAccumulator)
+                                enumWheelAccumulator = 0 -- Reset after triggering
+                            end
 
-                        -- Clamp the normalized value between 0.0 and 1.0
-                        currentNormalized =
-                            math.max(0.0, math.min(1.0, currentNormalized))
-
-                        -- Convert back to an enum index (1 to #values)
-                        newValue = math.floor(currentNormalized *
-                                                  (totalValues - 1) + 1.5)
-
-                        -- Ensure we're in valid range
-                        newValue = math.max(1, math.min(totalValues, newValue))
+                            -- Apply change only if threshold was met
+                            newValue = sp.current + actualDirection * step
+                            -- Clamp enum index
+                            newValue = math.max(1,
+                                                math.min(totalValues, newValue))
+                            -- Update Enum parameters directly (no smoothing for discrete steps)
+                            if newValue ~= sp.current then
+                                sp.current = newValue
+                                changedEnum = true -- Mark that value changed
+                                -- If parameter is automated, also update baseValue
+                                if M.parameterAutomation and
+                                    M.parameterAutomation[i] then
+                                    sp.baseValue = newValue
+                                end
+                                -- Update the script's parameters using the helper module
+                                M.helpers.updateScriptParameters(
+                                    M.scriptParameters, M.script)
+                            end
+                        end
                     else
-                        -- Fallback for enums without values array
-                        newValue = sp.current + (y > 0 and 1 or -1)
-                        newValue = math.max(1, math.min(sp.max or 1, newValue))
+                        -- Fallback for enums without values array (treat as integer)
+                        step = 1
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            step = 5
+                        end
+                        newValue = sp.current + direction * step
+                        newValue = math.max(sp.min or 1,
+                                            math.min(sp.max or 1, newValue))
+                        newValue = math.floor(newValue + 0.5)
+
+                        -- Also update fallback enums directly
+                        if newValue ~= sp.current then
+                            sp.current = newValue
+                            -- If parameter is automated, also update baseValue
+                            if M.parameterAutomation and
+                                M.parameterAutomation[i] then
+                                sp.baseValue = newValue
+                            end
+                            -- Update the script's parameters using the helper module
+                            M.helpers.updateScriptParameters(M.scriptParameters,
+                                                             M.script)
+                        end
                     end
+
+                    -- Set target for float smoothing (only floats should reach here without returning)
+                    if sp.type == "float" then
+                        parameterTargetValues[i] = newValue
+                    end
+
                 end
 
-                -- Only update if value actually changed
-                if newValue ~= sp.current then
-                    sp.current = newValue
-
-                    -- If parameter is automated, also update baseValue
-                    if M.parameterAutomation and M.parameterAutomation[i] then
-                        sp.baseValue = newValue
-                    end
-
-                    -- Update the script's parameters using the helper module
-                    M.helpers.updateScriptParameters(M.scriptParameters,
-                                                     M.script)
-                end
-
-                return true
+                return true -- Indicate event was handled
             end
         end
     end
@@ -963,4 +1010,83 @@ function M.cycleInputMode(inputIdx)
     end
 end
 
+-- Function to update parameter smoothing
+function M.updateParameterSmoothing(dt) -- dt might be useful later for frame-rate independence
+    local smoothingAlpha = 0.2 -- Tunable smoothing factor (lower = smoother, slower)
+    local paramsChanged = false
+
+    if M.scriptParameters and parameterTargetValues then
+        for i, targetValue in pairs(parameterTargetValues) do
+            local sp = M.scriptParameters[i]
+            if sp then
+                local currentValue = sp.current
+                local diff = targetValue - currentValue
+                -- Define a threshold to stop smoothing (e.g., 1% of a step or a small absolute value)
+                local snapThreshold = 0.01 -- Threshold only relevant for floats now
+
+                if math.abs(diff) > snapThreshold then
+                    local smoothedValue =
+                        smoothingAlpha * targetValue + (1 - smoothingAlpha) *
+                            currentValue
+
+                    -- Apply type-specific rounding/clamping AFTER smoothing
+                    if sp.type == "float" then
+                        smoothedValue = math.max(sp.min, math.min(sp.max,
+                                                                  smoothedValue))
+                    else
+                        -- Should not happen if only floats use smoothing, but handle defensively
+                        smoothedValue = currentValue -- Don't change non-floats here
+                    end
+
+                    -- Update only if the smoothed value actually changes the effective value (especially for int/enum)
+                    if smoothedValue ~= currentValue then
+                        sp.current = smoothedValue
+                        paramsChanged = true
+
+                        -- If parameter is automated, also update baseValue
+                        if M.parameterAutomation and M.parameterAutomation[i] then
+                            sp.baseValue = smoothedValue
+                        end
+                    end
+                else
+                    -- Difference is small, snap to target and remove from smoothing list
+                    local finalValue = targetValue -- Start with the exact target
+
+                    -- Apply final rounding/clamping for integer/enum types
+                    if sp.type == "integer" then
+                        finalValue = math.max(sp.min,
+                                              math.min(sp.max, finalValue))
+                        finalValue = math.floor(finalValue + 0.5)
+                    elseif sp.type == "float" then -- Only floats need snapping logic here
+                        finalValue = math.max(sp.min,
+                                              math.min(sp.max, finalValue))
+                    else
+                        -- Enums/Others already snapped or handled directly
+                        finalValue = currentValue -- Fallback, should already be correct
+                    end
+
+                    -- Update only if the final snapped value is different
+                    if finalValue ~= currentValue then
+                        sp.current = finalValue
+                        paramsChanged = true
+
+                        if M.parameterAutomation and M.parameterAutomation[i] then
+                            sp.baseValue = sp.current
+                        end
+                    end
+                    parameterTargetValues[i] = nil -- Stop smoothing for this parameter
+                end
+            else
+                parameterTargetValues[i] = nil -- Remove target if parameter doesn't exist anymore
+            end
+        end
+    end
+
+    -- Update script parameters if any changes were made during smoothing
+    if paramsChanged then
+        M.helpers.updateScriptParameters(M.scriptParameters, M.script)
+    end
+end
+
 return M
+

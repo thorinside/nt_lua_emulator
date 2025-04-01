@@ -607,6 +607,9 @@ function M.update(dt)
     -- Update reload blink state
     scriptManager.updateReloadBlink(time)
 
+    -- Update parameter smoothing
+    inputHandler.updateParameterSmoothing(dt)
+
     -- Update pending click actions
     inputHandler.updatePendingClicks(love.timer.getTime())
 
