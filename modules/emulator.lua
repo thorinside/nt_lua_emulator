@@ -671,25 +671,22 @@ function M.update(dt)
 
     -- Call step as many times as needed to match 1000Hz
     local outputValues
-    while M.stepAccumulator >= stepInterval do
-        -- Update input values for each step to check for gate transitions
-        currentInputs = signalProcessor.updateInputs(scriptInputAssignments,
-                                                     script)
 
-        -- Update automated parameters
-        parameterManager.updateAutomatedParameters(currentInputs)
+    -- Update input values for each step to check for gate transitions
+    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
 
-        -- Prepare script input values for each step
-        scriptInputValues = signalProcessor.prepareScriptInputValues(
-                                scriptInputCount, scriptInputAssignments)
+    -- Update automated parameters
+    parameterManager.updateAutomatedParameters(currentInputs)
 
-        -- Call the script's step function to update outputs
-        outputValues = scriptManager.callScriptStep(stepInterval,
-                                                    scriptInputValues)
+    -- Prepare script input values for each step
+    scriptInputValues = signalProcessor.prepareScriptInputValues(
+                            scriptInputCount, scriptInputAssignments)
 
-        M.stepAccumulator = M.stepAccumulator - stepInterval
-        M.lastStepTime = currentTime
-    end
+    -- Call the script's step function to update outputs
+    outputValues = scriptManager.callScriptStep(stepInterval, scriptInputValues)
+
+    M.stepAccumulator = M.stepAccumulator - stepInterval
+    M.lastStepTime = currentTime
 
     -- Update outputs with values from script
     -- Check if outputValues is a valid table - if it's nil or not a table,
@@ -698,6 +695,7 @@ function M.update(dt)
         currentOutputs = signalProcessor.updateOutputs(outputValues,
                                                        scriptOutputAssignments)
     end
+
     -- If outputValues is nil or not a table, we don't update the outputs,
     -- effectively keeping the previous values
 
