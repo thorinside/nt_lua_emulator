@@ -14,6 +14,8 @@ local lastSendTime = 0
 local currentConfig = nil
 local script = nil
 local enabled = false -- Track OSC enabled state
+local lastSentOutputs = nil -- Store previously sent values
+local OSC_VALUE_CHANGE_THRESHOLD = 1e-6 -- Tolerance for float comparison
 
 -- Check for emulator debug mode
 local function isDebugMode()
@@ -114,6 +116,26 @@ function osc_client.sendOutputs(outputs)
 
     lastSendTime = currentTime
 
+    -- Check if outputs have changed since last send
+    local hasChanged = false
+    if not lastSentOutputs or #outputs ~= #lastSentOutputs then
+        hasChanged = true
+    else
+        for i = 1, #outputs do
+            -- Compare with tolerance for floats
+            if math.abs(outputs[i] - lastSentOutputs[i]) >
+                OSC_VALUE_CHANGE_THRESHOLD then
+                hasChanged = true
+                break
+            end
+        end
+    end
+
+    -- Only send if values have changed
+    if not hasChanged then
+        return -- No change, skip sending
+    end
+
     -- Debug output summary if enabled
     if isDebugMode() then
         debugLog("Sending OSC values:", #outputs, "outputs")
@@ -143,6 +165,10 @@ function osc_client.sendOutputs(outputs)
             client.send_float(outputAddress, value)
         end
     end
+
+    -- Update last sent outputs (create a copy)
+    lastSentOutputs = {}
+    for i, v in ipairs(outputs) do lastSentOutputs[i] = v end
 end
 
 -- Update configuration
