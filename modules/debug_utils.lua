@@ -1,5 +1,8 @@
 local emulator = nil
 
+-- Get UI State for debug checking
+local uiState = require("modules.ui_state")
+
 -- Try to load emulator module for debug mode access
 local function loadEmulator()
     if not emulator then pcall(function() emulator = require("emulator") end) end
@@ -16,28 +19,19 @@ end
 local function debugLog(...) if isDebugMode() then print("[DEBUG]", ...) end end
 
 local debug_utils = {}
-local debugEnabled = false
 local debugFile = nil
 local lastMemory = 0
 local gcStats = {}
 local functionCallCounts = {}
 
--- Enable or disable debug logging
-function debug_utils.setDebugEnabled(enabled)
-    debugEnabled = enabled
-    if enabled and not debugFile then
-        debugFile = io.open("debug.log", "w")
-    elseif not enabled and debugFile then
-        debugFile:close()
-        debugFile = nil
-    end
-end
-
 -- Log a debug message
-function debug_utils.debugLog(message)
-    if debugEnabled then
+local function mainDebugLog(...) -- Accept variable arguments
+    -- Check uiState directly
+    if uiState and uiState.isDebugMode and uiState.isDebugMode() then
         local timeStr = os.date("%Y-%m-%d %H:%M:%S")
-        local logMessage = timeStr .. " - " .. tostring(message)
+        -- Concatenate all arguments into a single string
+        local messageContent = table.concat({...}, " ")
+        local logMessage = timeStr .. " - " .. messageContent
         print(logMessage)
         if debugFile then
             debugFile:write(logMessage .. "\n")
@@ -50,8 +44,9 @@ end
 function debug_utils.initMemoryProfiling()
     collectgarbage("collect") -- Force a full garbage collection
     lastMemory = collectgarbage("count")
-    debug_utils.debugLog("Memory profiling initialized. Current memory: " .. lastMemory .. " KB")
-    
+    debug_utils.debugLog("Memory profiling initialized. Current memory: " ..
+                             lastMemory .. " KB")
+
     -- Reset statistics
     gcStats = {
         collections = 0,
@@ -59,12 +54,12 @@ function debug_utils.initMemoryProfiling()
         peakMemory = lastMemory,
         memorySnapshots = {}
     }
-    
+
     functionCallCounts = {}
-    
+
     -- Take initial snapshot
     debug_utils.takeMemorySnapshot("Initial")
-    
+
     return lastMemory
 end
 
@@ -78,18 +73,20 @@ function debug_utils.takeMemorySnapshot(label)
         memory = currentMemory,
         diff = memoryDiff
     }
-    
+
     table.insert(gcStats.memorySnapshots, snapshot)
-    
+
     if currentMemory > gcStats.peakMemory then
         gcStats.peakMemory = currentMemory
     end
-    
+
     if debugEnabled then
-        local diffText = memoryDiff > 0 and "+" .. memoryDiff or tostring(memoryDiff)
-        debug_utils.debugLog("Memory " .. snapshot.label .. ": " .. currentMemory .. " KB (" .. diffText .. " KB)")
+        local diffText = memoryDiff > 0 and "+" .. memoryDiff or
+                             tostring(memoryDiff)
+        debug_utils.debugLog("Memory " .. snapshot.label .. ": " ..
+                                 currentMemory .. " KB (" .. diffText .. " KB)")
     end
-    
+
     lastMemory = currentMemory
     return currentMemory, memoryDiff
 end
@@ -104,27 +101,27 @@ function debug_utils.trackFunctionMemory(funcName, func, ...)
             totalMemoryImpact = 0
         }
     end
-    
+
     local stats = functionCallCounts[funcName]
     stats.calls = stats.calls + 1
-    
+
     local memoryBefore = collectgarbage("count")
     stats.totalMemoryBefore = stats.totalMemoryBefore + memoryBefore
-    
+
     -- Call the function with the provided arguments
     local results = {func(...)}
-    
+
     local memoryAfter = collectgarbage("count")
     stats.totalMemoryAfter = stats.totalMemoryAfter + memoryAfter
-    
+
     local memoryImpact = memoryAfter - memoryBefore
     stats.totalMemoryImpact = stats.totalMemoryImpact + memoryImpact
-    
+
     if debugEnabled and memoryImpact > 1 then
-        debug_utils.debugLog(string.format("Function %s: Memory impact %.2f KB", 
-            funcName, memoryImpact))
+        debug_utils.debugLog(string.format("Function %s: Memory impact %.2f KB",
+                                           funcName, memoryImpact))
     end
-    
+
     return table.unpack(results)
 end
 
@@ -143,13 +140,14 @@ function debug_utils.monitorGC()
         local memoryFreed = lastMemory - currentMemory
         gcStats.collections = gcStats.collections + 1
         gcStats.totalMemoryFreed = gcStats.totalMemoryFreed + memoryFreed
-        
+
         if debugEnabled then
-            debug_utils.debugLog(string.format("GC occurred: freed %.2f KB (collection #%d)", 
-                memoryFreed, gcStats.collections))
+            debug_utils.debugLog(string.format(
+                                     "GC occurred: freed %.2f KB (collection #%d)",
+                                     memoryFreed, gcStats.collections))
         end
     end
-    
+
     lastMemory = currentMemory
     return currentMemory
 end
@@ -163,10 +161,11 @@ function debug_utils.getMemoryReport()
         totalMemoryFreed = gcStats.totalMemoryFreed,
         functionStats = {}
     }
-    
+
     -- Sort functions by memory impact
     for funcName, stats in pairs(functionCallCounts) do
-        local avgImpact = stats.calls > 0 and (stats.totalMemoryImpact / stats.calls) or 0
+        local avgImpact = stats.calls > 0 and
+                              (stats.totalMemoryImpact / stats.calls) or 0
         table.insert(report.functionStats, {
             name = funcName,
             calls = stats.calls,
@@ -174,34 +173,38 @@ function debug_utils.getMemoryReport()
             avgImpact = avgImpact
         })
     end
-    
-    table.sort(report.functionStats, function(a, b) 
-        return a.totalImpact > b.totalImpact 
-    end)
-    
+
+    table.sort(report.functionStats,
+               function(a, b) return a.totalImpact > b.totalImpact end)
+
     return report
 end
 
 -- Print memory report to console/log
 function debug_utils.printMemoryReport()
     local report = debug_utils.getMemoryReport()
-    
+
     debug_utils.debugLog("=== MEMORY PROFILING REPORT ===")
-    debug_utils.debugLog(string.format("Current memory: %.2f KB", report.currentMemory))
-    debug_utils.debugLog(string.format("Peak memory: %.2f KB", report.peakMemory))
-    debug_utils.debugLog(string.format("GC collections: %d (freed %.2f KB total)", 
-        report.collections, report.totalMemoryFreed))
-    
+    debug_utils.debugLog(string.format("Current memory: %.2f KB",
+                                       report.currentMemory))
+    debug_utils.debugLog(
+        string.format("Peak memory: %.2f KB", report.peakMemory))
+    debug_utils.debugLog(string.format(
+                             "GC collections: %d (freed %.2f KB total)",
+                             report.collections, report.totalMemoryFreed))
+
     debug_utils.debugLog("\nTop memory-intensive functions:")
     for i, funcStats in ipairs(report.functionStats) do
         if i <= 10 then -- Show top 10
-            debug_utils.debugLog(string.format("%d. %s: %.2f KB total (%.2f KB avg, %d calls)", 
-                i, funcStats.name, funcStats.totalImpact, funcStats.avgImpact, funcStats.calls))
+            debug_utils.debugLog(string.format(
+                                     "%d. %s: %.2f KB total (%.2f KB avg, %d calls)",
+                                     i, funcStats.name, funcStats.totalImpact,
+                                     funcStats.avgImpact, funcStats.calls))
         end
     end
-    
+
     debug_utils.debugLog("===============================")
-    
+
     return report
 end
 
@@ -209,7 +212,7 @@ end
 function debug_utils.setGCMode(mode, param)
     mode = mode or "setstepmul"
     param = param or 200 -- Default is fairly aggressive
-    
+
     if mode == "setstepmul" then
         -- Controls how aggressive GC is (higher = more aggressive)
         -- Default is 200 (recommended range 100-400)
@@ -225,8 +228,7 @@ function debug_utils.setGCMode(mode, param)
     end
 end
 
--- Add original functions to our module
-debug_utils.isDebugMode = isDebugMode
-debug_utils.debugLog = debugLog
+-- Assign the modified function back to the module export
+debug_utils.debugLog = mainDebugLog
 
 return debug_utils

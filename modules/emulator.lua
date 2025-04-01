@@ -713,6 +713,7 @@ function M.update(dt)
                 oscOutputs[i] = 0
             end
         end
+
         osc_client.sendOutputs(oscOutputs)
     end
 

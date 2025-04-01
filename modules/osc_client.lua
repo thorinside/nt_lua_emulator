@@ -2,6 +2,7 @@
 local osc = require("modules.osc")
 local config = require("modules.config")
 local debug_utils = require("modules.debug_utils")
+local uiState = require("modules.ui_state")
 
 -- This might be undefined if emulator.lua isn't loaded yet
 local emulator
@@ -16,10 +17,8 @@ local enabled = false -- Track OSC enabled state
 
 -- Check for emulator debug mode
 local function isDebugMode()
-    if emulator and emulator.isDebugMode and emulator.isDebugMode() then
-        return true
-    end
-    return false
+    -- Use the uiState module directly
+    return uiState and uiState.isDebugMode and uiState.isDebugMode() or false
 end
 
 -- Helper function to log debug information
@@ -115,12 +114,8 @@ function osc_client.sendOutputs(outputs)
 
     lastSendTime = currentTime
 
-    local address = currentConfig.osc.address or "/dnt"
-    address = tostring(address) -- Ensure address is a string
-    if not address:match("^/") then address = "/" .. address end
-
     -- Debug output summary if enabled
-    if debug_utils.isDebugMode() then
+    if isDebugMode() then
         debugLog("Sending OSC values:", #outputs, "outputs")
         for i, value in ipairs(outputs) do
             local outputAddress = getOutputAddress(i)
@@ -130,6 +125,10 @@ function osc_client.sendOutputs(outputs)
 
     if currentConfig.osc.outputFormat == "array" then
         -- Send all outputs as a single message with multiple arguments
+        local address = currentConfig.osc.address or "/dnt"
+        address = tostring(address) -- Ensure address is a string
+        if not address:match("^/") then address = "/" .. address end
+
         -- Ensure we have at least one argument
         if #outputs == 0 then outputs = {0} end
         -- Send all values in a single message using send_float
@@ -142,7 +141,6 @@ function osc_client.sendOutputs(outputs)
         for i, value in ipairs(outputs) do
             local outputAddress = getOutputAddress(i)
             client.send_float(outputAddress, value)
-            debugLog("Sent float to", outputAddress, "=", value)
         end
     end
 end
