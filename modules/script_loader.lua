@@ -260,8 +260,8 @@ function M.loadScript(scriptPath, createDefaultMappings)
         newScript = result
     end
 
-    -- Load any saved script state from state.json and set it in the script object
-    local state = {}
+    -- Load overall emulator state from state.json
+    local emulatorState = {}
     local stateFile = io.open("state.json", "r")
     if stateFile then
         -- Protect the file reading operation with pcall
@@ -272,15 +272,38 @@ function M.loadScript(scriptPath, createDefaultMappings)
         end)
 
         if readSuccess then
-            local success, result = pcall(json.decode, content)
-            if success then state = result end
+            local decodeSuccess, decodedJson = pcall(json.decode, content)
+            if decodeSuccess then
+                emulatorState = decodedJson
+                print("ScriptLoader: Successfully loaded state.json")
+            else
+                print("ScriptLoader: Error decoding state.json: ",
+                      tostring(decodedJson))
+            end
         else
-            print("Error reading state file:", content) -- content will contain the error message
-            -- Make sure the file is closed if there was an error
-            pcall(function() if stateFile then stateFile:close() end end)
+            print("ScriptLoader: Error reading state.json: ", tostring(content))
+            -- Ensure file is closed on read error
+            pcall(function()
+                if stateFile and not stateFile:isclosed() then
+                    stateFile:close()
+                end
+            end)
         end
+    else
+        print("ScriptLoader: state.json not found or could not be opened.")
     end
 
+    -- *** Assign saved script-specific state (if available) before calling init ***
+    if emulatorState.scriptState and type(emulatorState.scriptState) == "table" then
+        newScript.state = emulatorState.scriptState
+        print(
+            "ScriptLoader: Found scriptState in state.json, assigning to newScript.state")
+    else
+        newScript.state = nil -- Ensure it's nil if not found or invalid
+        print("ScriptLoader: No valid scriptState found in state.json")
+    end
+
+    -- Call script's init function, passing the script object (which now contains .state)
     if newScript.init then
         local initResult = safeScriptCall(newScript.init, newScript)
         if type(initResult) == "table" then
@@ -331,10 +354,10 @@ function M.loadScript(scriptPath, createDefaultMappings)
     end
 
     -- Save the script path to state.json
-    state.scriptPath = scriptPath
+    emulatorState.scriptPath = scriptPath
     local stateFile = io.open("state.json", "w")
     if stateFile then
-        stateFile:write(json.encode(state, {indent = true}))
+        stateFile:write(json.encode(emulatorState, {indent = true}))
         stateFile:close()
     end
 
