@@ -235,9 +235,9 @@ local function saveIOState(forceSave)
     end
 
     -- Get input states from signal processor
-    local inputClock = signalProcessor.getInputClock()
-    local inputPolarity = signalProcessor.getInputPolarity()
-    local inputScaling = signalProcessor.getInputScaling()
+    local inputClock = signalProcessor.getInputClockTable()
+    local inputPolarity = signalProcessor.getInputPolarityTable()
+    local inputScaling = signalProcessor.getInputScalingTable()
 
     -- Save input modes and scaling
     for i = 1, 12 do -- 12 physical inputs
@@ -806,9 +806,9 @@ function M.draw()
             local physicalIOBottomY = io_panel.drawPhysicalIO({
                 currentInputs = currentInputs,
                 currentOutputs = currentOutputs,
-                inputClock = signalProcessor.getInputClock(),
-                inputPolarity = signalProcessor.getInputPolarity(),
-                inputScaling = signalProcessor.getInputScaling(),
+                inputClock = signalProcessor.getInputClockTable(),
+                inputPolarity = signalProcessor.getInputPolarityTable(),
+                inputScaling = signalProcessor.getInputScalingTable(),
                 clockBPM = signalProcessor.getClockBPM(),
                 font = fontDefault,
                 physInputX = 40,
@@ -822,7 +822,7 @@ function M.draw()
 
             -- Display BPM if there's at least one clock input
             local hasClockInput = false
-            local inputClock = signalProcessor.getInputClock()
+            local inputClock = signalProcessor.getInputClockTable()
             for i = 1, 12 do
                 if inputClock[i] then
                     hasClockInput = true

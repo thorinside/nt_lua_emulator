@@ -25,11 +25,9 @@ local pendingIndex = nil
 local pressX, pressY = 0, 0
 local clickThreshold = 6
 
--- Double-click detection
-local lastClickTime = 0
-local lastClickType = nil
-local lastClickIndex = nil
-local doubleClickThreshold = 0.3 -- seconds
+-- Long-click detection for physical input reset
+local longClickCandidate = {type = nil, index = nil, startTime = 0} -- Removed actionTaken flag
+local longClickThreshold = 0.7 -- seconds
 
 -- Parameter knob manipulation
 local knobDragIndex = nil
@@ -49,8 +47,8 @@ local enumAccumulatorIndex = nil -- Which knob index the accumulator applies to
 -- Active elements
 local activeKnob = nil -- Currently hovered knob for mouse wheel control
 
--- Pending click actions
-local pendingClickActions = {}
+-- Pending click actions (REMOVED - No longer needed with immediate clicks/long press)
+-- local pendingClickActions = {}
 local parameterTargetValues = {} -- Table to store target values for smoothing
 
 -- Initialize the module with required dependencies
@@ -73,14 +71,13 @@ function M.init(deps)
     pendingPress = false
     pendingType = nil
     pendingIndex = nil
-    lastClickTime = 0
-    lastClickType = nil
-    lastClickIndex = nil
+    -- Reset long click state
+    longClickCandidate = {type = nil, index = nil, startTime = 0}
     knobDragIndex = nil
     scalingInput = nil
     activeKnob = nil
     M.activeKnob = nil
-    pendingClickActions = {}
+    -- pendingClickActions = {} -- Removed
     parameterTargetValues = {} -- Reset target values on init
 
     -- Set default UI scale factor
@@ -98,9 +95,10 @@ function M.setState(state)
     M.scriptOutputAssignments = state.scriptOutputAssignments
     M.currentInputs = state.currentInputs
     M.currentOutputs = state.currentOutputs
-    M.inputClock = state.inputClock
-    M.inputPolarity = state.inputPolarity
-    M.inputScaling = state.inputScaling
+    -- No longer need direct access to these, use signalProcessor
+    -- M.inputClock = state.inputClock
+    -- M.inputPolarity = state.inputPolarity
+    -- M.inputScaling = state.inputScaling
     M.clockBPM = state.clockBPM
     M.minBPM = state.minBPM
     M.maxBPM = state.maxBPM
@@ -118,7 +116,8 @@ function M.setState(state)
 end
 
 -- Update pending click actions (called during emulator's update loop)
-function M.updatePendingClicks(currentTime)
+-- Renamed conceptually to updateTimedActions or similar
+function M.updatePendingClicks(currentTime) -- Keep name for now
     -- Handle BPM button holding
     if bpmButtonHeld and currentTime > bpmHoldStartTime + bpmRepeatDelay and
         currentTime >= bpmNextRepeatTime then
@@ -146,6 +145,12 @@ function M.updatePendingClicks(currentTime)
         bpmNextRepeatTime = currentTime + bpmRepeatInterval
     end
 
+    -- Process pending single-click actions (REMOVED)
+    -- for i = #pendingClickActions, 1, -1 do ... end
+
+    -- Check for long press reset on physical inputs (REMOVED - Handled in mousereleased now)
+    -- if longClickCandidate.type == "input" and longClickCandidate.index then ... end
+
     -- Add parameter smoothing logic
     local smoothingAlpha = 0.2 -- Tunable smoothing factor (lower = smoother, slower)
     local smoothingThreshold = 0.005 -- Stop smoothing when difference is small (relative to range for floats?)
@@ -158,7 +163,7 @@ function M.updatePendingClicks(currentTime)
                 local currentValue = sp.current
                 local diff = targetValue - currentValue
                 -- Define a threshold to stop smoothing (e.g., 1% of a step or a small absolute value)
-                local snapThreshold = 0.01 -- Threshold for floats
+                local snapThreshold = 0.01 -- Threshold only relevant for floats now
 
                 if math.abs(diff) > snapThreshold then
                     local smoothedValue =
@@ -166,9 +171,13 @@ function M.updatePendingClicks(currentTime)
                             currentValue
 
                     -- Apply type-specific rounding/clamping AFTER smoothing
-                    -- Smoothing only applies to float types
-                    smoothedValue = math.max(sp.min,
-                                             math.min(sp.max, smoothedValue))
+                    if sp.type == "float" then
+                        smoothedValue = math.max(sp.min, math.min(sp.max,
+                                                                  smoothedValue))
+                    else
+                        -- Should not happen if only floats use smoothing, but handle defensively
+                        smoothedValue = currentValue -- Don't change non-floats here
+                    end
 
                     -- Update only if the smoothed value actually changes the effective value (especially for int/enum)
                     if smoothedValue ~= currentValue then
@@ -185,8 +194,17 @@ function M.updatePendingClicks(currentTime)
                     local finalValue = targetValue -- Start with the exact target
 
                     -- Apply final rounding/clamping for integer/enum types
-                    -- Snap float value
-                    finalValue = math.max(sp.min, math.min(sp.max, finalValue))
+                    if sp.type == "integer" then
+                        finalValue = math.max(sp.min,
+                                              math.min(sp.max, finalValue))
+                        finalValue = math.floor(finalValue + 0.5)
+                    elseif sp.type == "float" then -- Only floats need snapping logic here
+                        finalValue = math.max(sp.min,
+                                              math.min(sp.max, finalValue))
+                    else
+                        -- Enums/Others already snapped or handled directly
+                        finalValue = currentValue -- Fallback, should already be correct
+                    end
 
                     -- Update only if the final snapped value is different
                     if finalValue ~= currentValue then
@@ -228,11 +246,11 @@ function M.mousepressed(x, y, button)
     if M.controls.mousepressed(lx, ly, button) then return true end
 
     local currentTime = love.timer.getTime()
-    local isDoubleClick = false
+    -- local isDoubleClick = false -- Removed double click logic
 
-    -- Check for double click
-    if button == 1 and lastClickTime and (currentTime - lastClickTime) <
-        doubleClickThreshold then isDoubleClick = true end
+    -- Check for double click (REMOVED for most elements)
+    -- if button == 1 and lastClickTime and (currentTime - lastClickTime) <
+    --    doubleClickThreshold then isDoubleClick = true end
 
     -- Check if BPM adjustment buttons were clicked
     if button == 1 then
@@ -308,8 +326,15 @@ function M.mousepressed(x, y, button)
             -- Use scaled radius for hit testing
             local hitRadius = M.paramKnobRadius * M.uiScaleFactor
             if dx * dx + dy * dy <= hitRadius * hitRadius then
-                if isDoubleClick and lastClickType == "knob" and lastClickIndex ==
-                    i then
+                -- Double-click reset logic for KNOBS remains
+                local isDoubleClick = false
+                if button == 1 and lastClickTime and
+                    (currentTime - lastClickTime) < doubleClickThreshold and
+                    lastClickType == "knob" and lastClickIndex == i then
+                    isDoubleClick = true
+                end
+
+                if isDoubleClick then
                     -- Double-clicked on parameter knob - reset to default value
                     if sp.default then
                         -- Clear any automation
@@ -339,7 +364,7 @@ function M.mousepressed(x, y, button)
                     dragX = lx -- Initialize horizontal drag position
                     dragY = ly -- Initialize vertical drag position
 
-                    -- Store click for double-click detection
+                    -- Store click for double-click detection (FOR KNOBS ONLY)
                     lastClickTime = currentTime
                     lastClickType = "knob"
                     lastClickIndex = i
@@ -349,62 +374,44 @@ function M.mousepressed(x, y, button)
         end
     end
 
-    -- Script inputs
+    -- Script inputs (Double click reset REMOVED - consider long press later?)
     local scriptInputPos = M.io_panel.getScriptInputPositions()
     if scriptInputPos then
         for i, pos in ipairs(scriptInputPos) do
             local dx = lx - pos[1]
             local dy = ly - pos[2]
             if math.sqrt(dx * dx + dy * dy) <= 12 then
-                if isDoubleClick and lastClickType == "scriptInput" and
-                    lastClickIndex == i then
-                    -- Double-clicked on script input - clear assignment
-                    if M.scriptInputAssignments[i] then
-                        M.scriptInputAssignments[i] = nil
-                        M.markMappingsChanged()
-                    end
+                -- REMOVED Double-clicked on script input - clear assignment
+                -- if isDoubleClick and lastClickType == "scriptInput" and
+                --    lastClickIndex == i then ... end
 
-                    -- Reset double-click state
-                    lastClickTime = 0
-                    return true
-                end
-
-                -- Store click for double-click detection
-                lastClickTime = currentTime
-                lastClickType = "scriptInput"
-                lastClickIndex = i
-                return true
+                -- Store click for potential future interaction (drag/etc)
+                -- lastClickTime = currentTime -- Not needed unless double-click is added back
+                -- lastClickType = "scriptInput"
+                -- lastClickIndex = i
+                -- For now, just clicking doesn't do anything here, only dragging *from* physical input
+                return true -- Consume click
             end
         end
     end
 
-    -- Script outputs
+    -- Script outputs (Double click reset REMOVED)
     local scriptOutputPos = M.io_panel.getScriptOutputPositions()
     if scriptOutputPos then
         for i, pos in ipairs(scriptOutputPos) do
             local dx = lx - pos[1]
             local dy = ly - pos[2]
             if math.sqrt(dx * dx + dy * dy) <= 12 then
-                if isDoubleClick and lastClickType == "scriptOutput" and
-                    lastClickIndex == i then
-                    -- Double-clicked on script output - clear assignment
-                    if M.scriptOutputAssignments[i] then
-                        -- Clear voltage on the physical output that was connected
-                        M.currentOutputs[M.scriptOutputAssignments[i]] = 0
-                        M.scriptOutputAssignments[i] = nil
-                        M.markMappingsChanged()
-                    end
+                -- REMOVED Double-clicked on script output - clear assignment
+                -- if isDoubleClick and lastClickType == "scriptOutput" and
+                --    lastClickIndex == i then ... end
 
-                    -- Reset double-click state
-                    lastClickTime = 0
-                    return true
-                end
-
-                -- Store click for double-click detection
-                lastClickTime = currentTime
-                lastClickType = "scriptOutput"
-                lastClickIndex = i
-                return true
+                -- Store click for potential future interaction (drag/etc)
+                -- lastClickTime = currentTime -- Not needed unless double-click is added back
+                -- lastClickType = "scriptOutput"
+                -- lastClickIndex = i
+                -- For now, just clicking doesn't do anything here, only dragging *from* physical output
+                return true -- Consume click
             end
         end
     end
@@ -419,48 +426,37 @@ function M.mousepressed(x, y, button)
                 if button == 2 then
                     -- Right button is only for dragging to set attenuation level
                     pendingPress = true
-                    pendingType = "input"
+                    pendingType = "input_attenuation" -- Specific type for right-drag
                     pendingIndex = i
                     pressX, pressY = lx, ly
+                    -- Clear any potential long click from left button
+                    longClickCandidate = {
+                        type = nil,
+                        index = nil,
+                        startTime = 0
+                    }
                     return true
                 elseif button == 1 then
-                    if isDoubleClick and lastClickType == "physicalInput" and
-                        lastClickIndex == i then
-                        -- Double click to reset to default state
-                        local changed = (M.inputClock[i] ~= false) or
-                                            (M.inputPolarity[i] ~= kBipolar) or
-                                            (M.inputScaling[i] ~= 1.0)
+                    -- REMOVED Double click reset logic
+                    -- if isDoubleClick and lastClickType == "physicalInput" and ... end
 
-                        M.inputClock[i] = false
-                        M.inputPolarity[i] = kBipolar
-                        M.inputScaling[i] = 1.0
-
-                        if changed then
-                            M.markMappingsChanged() -- Mark as changed when reset
-                        end
-
-                        -- Remove any pending actions for this input
-                        for j = #pendingClickActions, 1, -1 do
-                            if pendingClickActions[j].type == "cycleInputMode" and
-                                pendingClickActions[j].inputIndex == i then
-                                table.remove(pendingClickActions, j)
-                            end
-                        end
-
-                        -- Reset double-click state
-                        lastClickTime = 0
-                        return true
-                    end
-
+                    -- Prepare for potential drag OR single/long click
                     pendingPress = true
                     pendingType = "input"
                     pendingIndex = i
                     pressX, pressY = lx, ly
 
-                    -- Store click for double-click detection
-                    lastClickTime = currentTime
-                    lastClickType = "physicalInput"
-                    lastClickIndex = i
+                    -- Start tracking for potential long click
+                    longClickCandidate = {
+                        type = "input",
+                        index = i,
+                        startTime = currentTime
+                    }
+
+                    -- REMOVED storing for double click
+                    -- lastClickTime = currentTime
+                    -- lastClickType = "physicalInput"
+                    -- lastClickIndex = i
                     return true
                 end
             end
@@ -476,24 +472,27 @@ function M.mousepressed(x, y, button)
             if math.sqrt(dx * dx + dy * dy) <= 15 then
                 if button == 1 then
                     pendingPress = true
-                    pendingType = "output"
+                    pendingType = "output" -- For dragging connection
                     pendingIndex = i
                     pressX, pressY = lx, ly
 
-                    -- Store click for double-click detection
-                    lastClickTime = currentTime
-                    lastClickType = "physicalOutput"
-                    lastClickIndex = i
+                    -- REMOVED storing for double click
+                    -- lastClickTime = currentTime
+                    -- lastClickType = "physicalOutput"
+                    -- lastClickIndex = i
                     return true
                 end
             end
         end
     end
 
-    -- Reset double-click detection if clicking elsewhere
-    lastClickTime = 0
-    lastClickType = nil
-    lastClickIndex = nil
+    -- Reset double-click detection if clicking elsewhere (Only relevant for knobs now)
+    -- lastClickTime = 0
+    -- lastClickType = nil
+    -- lastClickIndex = nil
+
+    -- Clear long click candidate if clicking elsewhere
+    longClickCandidate = {type = nil, index = nil, startTime = 0}
 
     return false
 end
@@ -526,12 +525,16 @@ function M.mousemoved(x, y, dx, dy)
     if pendingPress and not dragging then
         local dist = math.sqrt((lx - pressX) ^ 2 + (ly - pressY) ^ 2)
         if dist > clickThreshold then
+            -- It's a drag, not a click/long-click
             dragging = true
-            dragType = pendingType
+            dragType = pendingType -- Will be "input", "output", or "input_attenuation"
             dragIndex = pendingIndex
             dragX = lx
             dragY = ly
-            pendingPress = false
+            pendingPress = false -- Drag started, pending is over
+
+            -- Cancel any potential long click
+            longClickCandidate = {type = nil, index = nil, startTime = 0}
         end
     end
 
@@ -600,53 +603,111 @@ function M.mousereleased(x, y, button)
 
     -- Note: Input scaling is now handled by mouse wheel
 
-    -- Handle pending press that didn't become a drag
+    -- Handle pending press that didn't become a drag (i.e., a click or long-click release)
     if pendingPress then
-        if pendingType == "input" then
-            -- Check if this input is connected to a kTrigger script input
-            local isTriggerInput = false
-            local scriptInputIdx = nil
-            for idx, assignedPhysInput in pairs(M.scriptInputAssignments) do
-                if assignedPhysInput == pendingIndex and type(M.script.inputs) ==
-                    "table" and M.script.inputs[idx] == kTrigger then
-                    isTriggerInput = true
-                    scriptInputIdx = idx
-                    break
-                end
-            end
+        -- Check if it was a physical input left-click candidate
+        if pendingType == "input" and pendingIndex then
+            -- Ensure the candidate matches the released input
+            if longClickCandidate.index == pendingIndex then
+                local pressDuration = love.timer.getTime() -
+                                          longClickCandidate.startTime
 
-            if isTriggerInput and scriptInputIdx then
-                -- For trigger inputs, send a 10ms pulse
-                M.triggerPulseActive[pendingIndex] = true
-                M.triggerPulseTimes[pendingIndex] = M.time
-                -- Call the script's trigger function if it exists
-                if M.script.trigger then
-                    -- Pass the script input index, not the physical input index
-                    if M.signalProcessor and M.signalProcessor.scriptManager then
-                        M.signalProcessor.scriptManager.callScriptTrigger({
-                            input = scriptInputIdx
-                        })
+                if pressDuration >= longClickThreshold then
+                    -- LONG CLICK: Reset the input to default
+                    print("Long click RESET detected on input", pendingIndex,
+                          "Duration:", pressDuration) -- Debug
+
+                    local changed = false
+                    if M.signalProcessor and M.signalProcessor.setInputClock then
+                        if M.signalProcessor.getInputClock(pendingIndex) ~=
+                            false then
+                            M.signalProcessor.setInputClock(pendingIndex, false)
+                            changed = true
+                        end
+                    end
+                    if M.signalProcessor and M.signalProcessor.setInputPolarity then
+                        if M.signalProcessor.getInputPolarity(pendingIndex) ~=
+                            kBipolar then
+                            M.signalProcessor.setInputPolarity(pendingIndex,
+                                                               kBipolar)
+                            changed = true
+                        end
+                    end
+                    if M.signalProcessor and M.signalProcessor.setInputScaling then
+                        if M.signalProcessor.getInputScaling(pendingIndex) ~=
+                            1.0 then
+                            M.signalProcessor.setInputScaling(pendingIndex, 1.0)
+                            changed = true
+                        end
+                    end
+
+                    if changed then M.markMappingsChanged() end
+
+                else
+                    -- SHORT CLICK: Perform single-click action (cycle/trigger)
+                    print("Short click detected on input", pendingIndex,
+                          "Duration:", pressDuration) -- Debug
+
+                    -- Check if this input is connected to a kTrigger script input
+                    local isTriggerInput = false
+                    local scriptInputIdx = nil
+                    if M.scriptInputAssignments and M.script and M.script.inputs then
+                        for idx, assignedPhysInput in pairs(
+                                                          M.scriptInputAssignments) do
+                            if assignedPhysInput == pendingIndex and
+                                type(M.script.inputs) == "table" and
+                                M.script.inputs[idx] == kTrigger then
+                                isTriggerInput = true
+                                scriptInputIdx = idx
+                                break
+                            end
+                        end
+                    end
+
+                    if isTriggerInput and scriptInputIdx then
+                        -- For trigger inputs, send a 10ms pulse on single click
+                        M.triggerPulseActive[pendingIndex] = true
+                        M.triggerPulseTimes[pendingIndex] = M.time
+                        -- Call the script's trigger function if it exists
+                        if M.script.trigger then
+                            -- Pass the script input index, not the physical input index
+                            if M.signalProcessor and
+                                M.signalProcessor.scriptManager then
+                                M.signalProcessor.scriptManager
+                                    .callScriptTrigger({input = scriptInputIdx})
+                            else
+                                M.safeScriptCall(M.script.trigger, M.script,
+                                                 scriptInputIdx)
+                            end
+                        end
+                        print("Trigger pulse sent for input", pendingIndex,
+                              "-> script input", scriptInputIdx) -- Debug
                     else
-                        M.safeScriptCall(M.script.trigger, M.script,
-                                         scriptInputIdx)
+                        -- For non-trigger inputs, cycle through modes immediately
+                        M.cycleInputMode(pendingIndex)
+                        print("Cycle mode called for input", pendingIndex) -- Debug
                     end
                 end
+                -- Clear the candidate immediately after processing click/long-click
+                longClickCandidate = {type = nil, index = nil, startTime = 0}
             else
-                -- For non-trigger inputs, cycle through modes as before
-                local currentTime = love.timer.getTime()
-                table.insert(pendingClickActions, {
-                    type = "cycleInputMode",
-                    inputIndex = pendingIndex,
-                    executeAfter = currentTime + doubleClickThreshold
-                })
+                -- Click released on a different input than pressed, or candidate invalid - ignore
+                print(
+                    "Mismatched release/candidate or invalid candidate for input",
+                    pendingIndex) -- Debug
+                -- Ensure candidate is cleared anyway
+                longClickCandidate = {type = nil, index = nil, startTime = 0}
             end
         end
-        pendingPress = false
-        return true
+        pendingPress = false -- Press processed
+        return true -- Event handled
     end
 
-    -- Handle dragging connections
+    -- Handle dragging connections release
     if dragging then
+        -- Clear candidate on drag release too
+        longClickCandidate = {type = nil, index = nil, startTime = 0}
+
         if dragType == "input" then
             -- Check if we're over a parameter knob
             if M.scriptParameters then
@@ -710,6 +771,9 @@ function M.mousereleased(x, y, button)
 
     -- Reset knob dragging state
     if knobDragIndex then knobDragIndex = nil end
+
+    -- Clear the long click candidate state AFTER press/drag release is handled (Safety Net)
+    longClickCandidate = {type = nil, index = nil, startTime = 0}
 
     return false
 end
@@ -990,31 +1054,59 @@ end
 
 -- Function to cycle through input modes
 function M.cycleInputMode(inputIdx)
-    if not M.inputClock then return end
-
-    -- If currently not a clock input, make it a clock input
-    if not M.inputClock[inputIdx] then
-        M.inputClock[inputIdx] = true
-        M.inputPolarity[inputIdx] = kBipolar -- Reset polarity when making clock
-        M.inputScaling[inputIdx] = 1.0 -- Reset scaling when making clock
-        M.markMappingsChanged()
+    -- Make sure signalProcessor is available
+    if not M.signalProcessor or not M.signalProcessor.setInputClock or
+        not M.signalProcessor.setInputPolarity or
+        not M.signalProcessor.setInputScaling or
+        not M.signalProcessor.getInputClock or
+        not M.signalProcessor.getInputPolarity then
+        print(
+            "Error: Signal processor functions not available in cycleInputMode.")
         return
     end
 
-    -- If currently a clock input, make it a unipolar CV input
-    if M.inputClock[inputIdx] and M.inputPolarity[inputIdx] == kBipolar then
-        M.inputClock[inputIdx] = false
-        M.inputPolarity[inputIdx] = kUnipolar
-        M.markMappingsChanged()
-        return
-    end
+    local isCurrentlyClock = M.signalProcessor.getInputClock(inputIdx)
+    local currentPolarity = M.signalProcessor.getInputPolarity(inputIdx)
 
-    -- If currently a unipolar CV input, make it a bipolar CV input
-    if not M.inputClock[inputIdx] and M.inputPolarity[inputIdx] == kUnipolar then
-        M.inputPolarity[inputIdx] = kBipolar
-        M.markMappingsChanged()
-        return
+    -- Print the state *before* changing it
+    print(string.format(
+              "CycleInputMode: Input %d - Current State: Clock=%s, Polarity=%s",
+              inputIdx, tostring(isCurrentlyClock), tostring(currentPolarity)))
+
+    if not isCurrentlyClock then
+        -- Currently CV mode (Bipolar or Unipolar)
+        if currentPolarity == kBipolar then
+            -- Bipolar CV -> Clock
+            print("  -> Transitioning to Clock") -- Debug
+            M.signalProcessor.setInputClock(inputIdx, true)
+            M.signalProcessor.setInputPolarity(inputIdx, kBipolar) -- Reset polarity for Clock
+            M.signalProcessor.setInputScaling(inputIdx, 1.0) -- Reset scaling for Clock
+            -- print("Input " .. inputIdx .. ": Bipolar CV -> Clock") -- Debug
+        elseif currentPolarity == kUnipolar then
+            -- Unipolar CV -> Bipolar CV
+            print("  -> Transitioning to Bipolar CV") -- Debug
+            M.signalProcessor.setInputClock(inputIdx, false) -- Ensure clock is off
+            M.signalProcessor.setInputPolarity(inputIdx, kBipolar)
+            M.signalProcessor.setInputScaling(inputIdx, 1.0) -- Reset scaling when returning to Bipolar
+            -- print("Input " .. inputIdx .. ": Unipolar CV -> Bipolar CV") -- Debug
+        else
+            -- Unknown polarity state? Default to Bipolar CV
+            print("  -> Unknown CV state, defaulting to Bipolar CV") -- Debug
+            M.signalProcessor.setInputClock(inputIdx, false)
+            M.signalProcessor.setInputPolarity(inputIdx, kBipolar)
+            M.signalProcessor.setInputScaling(inputIdx, 1.0)
+            -- print("Input " .. inputIdx .. ": Unknown CV -> Bipolar CV") -- Debug
+        end
+    else
+        -- Currently Clock mode
+        -- Clock -> Unipolar CV
+        print("  -> Transitioning to Unipolar CV") -- Debug
+        M.signalProcessor.setInputClock(inputIdx, false)
+        M.signalProcessor.setInputPolarity(inputIdx, kUnipolar)
+        -- Scaling was reset when entering clock mode, keep it reset (1.0)
+        -- print("Input " .. inputIdx .. ": Clock -> Unipolar CV") -- Debug
     end
+    M.markMappingsChanged() -- Mark changed after any transition
 end
 
 -- Function to update parameter smoothing

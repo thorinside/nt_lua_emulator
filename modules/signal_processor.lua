@@ -78,13 +78,33 @@ function M.getCurrentInputs() return currentInputs end
 function M.getCurrentOutputs() return currentOutputs end
 
 -- Get input clock states
-function M.getInputClock() return inputClock end
+function M.getInputClock(inputIndex)
+    if inputIndex and inputIndex >= 1 and inputIndex <= 12 then
+        return inputClock[inputIndex]
+    end
+    return nil -- Or false? Return nil for invalid index.
+end
 
 -- Get input polarity states
-function M.getInputPolarity() return inputPolarity end
+function M.getInputPolarity(inputIndex)
+    if inputIndex and inputIndex >= 1 and inputIndex <= 12 then
+        return inputPolarity[inputIndex]
+    end
+    return nil -- Return nil for invalid index.
+end
 
 -- Get input scaling values
-function M.getInputScaling() return inputScaling end
+function M.getInputScaling(inputIndex)
+    if inputIndex and inputIndex >= 1 and inputIndex <= 12 then
+        return inputScaling[inputIndex]
+    end
+    return nil -- Return nil for invalid index.
+end
+
+-- Get entire input state tables (for drawing/saving)
+function M.getInputClockTable() return inputClock end
+function M.getInputPolarityTable() return inputPolarity end
+function M.getInputScalingTable() return inputScaling end
 
 -- Set input clock for an input
 function M.setInputClock(inputIndex, enabled)
