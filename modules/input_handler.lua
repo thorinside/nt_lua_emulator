@@ -914,6 +914,24 @@ function M.wheelmoved(x, y)
                     -- Clamp float value
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
 
+                    -- Decide action based on scale
+                    if sp.scale == kBy10 or sp.scale == kBy100 or sp.scale ==
+                        kBy1000 then
+                        -- Update scaled floats directly
+                        if newValue ~= sp.current then
+                            sp.current = newValue
+                            if M.parameterAutomation and
+                                M.parameterAutomation[i] then
+                                sp.baseValue = newValue
+                            end
+                            M.helpers.updateScriptParameters(M.scriptParameters,
+                                                             M.script)
+                        end
+                    else
+                        -- Set target for smoothing for non-scaled floats
+                        parameterTargetValues[i] = newValue
+                    end
+
                 elseif sp.type == "integer" then
                     step = 1 -- Step by 1 for integers
                     local largeStep = 5 -- Larger step for shift+scroll on integers
