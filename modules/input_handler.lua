@@ -25,6 +25,11 @@ local pendingIndex = nil
 local pressX, pressY = 0, 0
 local clickThreshold = 6
 
+-- Variables for double-click detection
+local lastClickTime = 0
+local lastClickType = nil
+local lastClickIndex = nil
+
 -- Long-click detection for physical input reset
 local longClickCandidate = {type = nil, index = nil, startTime = 0} -- Removed actionTaken flag
 local longClickThreshold = 0.7 -- seconds
@@ -246,11 +251,12 @@ function M.mousepressed(x, y, button)
     if M.controls.mousepressed(lx, ly, button) then return true end
 
     local currentTime = love.timer.getTime()
-    -- local isDoubleClick = false -- Removed double click logic
+    local isDoubleClick = false -- Initialize double-click flag
+    local doubleClickThreshold = 0.4 -- Define threshold (e.g., 0.4 seconds)
 
-    -- Check for double click (REMOVED for most elements)
-    -- if button == 1 and lastClickTime and (currentTime - lastClickTime) <
-    --    doubleClickThreshold then isDoubleClick = true end
+    -- Check for double click
+    if button == 1 and lastClickTime and (currentTime - lastClickTime) <
+        doubleClickThreshold then isDoubleClick = true end
 
     -- Check if BPM adjustment buttons were clicked
     if button == 1 then
@@ -381,14 +387,23 @@ function M.mousepressed(x, y, button)
             local dx = lx - pos[1]
             local dy = ly - pos[2]
             if math.sqrt(dx * dx + dy * dy) <= 12 then
-                -- REMOVED Double-clicked on script input - clear assignment
-                -- if isDoubleClick and lastClickType == "scriptInput" and
-                --    lastClickIndex == i then ... end
+                -- Check for double click on script input to clear assignment
+                if isDoubleClick and lastClickType == "scriptInput" and
+                    lastClickIndex == i then
+                    if M.scriptInputAssignments[i] then
+                        M.scriptInputAssignments[i] = nil
+                        M.markMappingsChanged()
+                        -- print("Cleared script input assignment " .. i) -- Debug
+                    end
+                    -- Reset double-click state after action
+                    lastClickTime = 0
+                    return true -- Consume double-click
+                end
 
-                -- Store click for potential future interaction (drag/etc)
-                -- lastClickTime = currentTime -- Not needed unless double-click is added back
-                -- lastClickType = "scriptInput"
-                -- lastClickIndex = i
+                -- Store click for potential future interaction (drag/etc) and double-click detection
+                lastClickTime = currentTime
+                lastClickType = "scriptInput"
+                lastClickIndex = i
                 -- For now, just clicking doesn't do anything here, only dragging *from* physical input
                 return true -- Consume click
             end
@@ -402,14 +417,23 @@ function M.mousepressed(x, y, button)
             local dx = lx - pos[1]
             local dy = ly - pos[2]
             if math.sqrt(dx * dx + dy * dy) <= 12 then
-                -- REMOVED Double-clicked on script output - clear assignment
-                -- if isDoubleClick and lastClickType == "scriptOutput" and
-                --    lastClickIndex == i then ... end
+                -- Check for double click on script output to clear assignment
+                if isDoubleClick and lastClickType == "scriptOutput" and
+                    lastClickIndex == i then
+                    if M.scriptOutputAssignments[i] then
+                        M.scriptOutputAssignments[i] = nil
+                        M.markMappingsChanged()
+                        -- print("Cleared script output assignment " .. i) -- Debug
+                    end
+                    -- Reset double-click state after action
+                    lastClickTime = 0
+                    return true -- Consume double-click
+                end
 
-                -- Store click for potential future interaction (drag/etc)
-                -- lastClickTime = currentTime -- Not needed unless double-click is added back
-                -- lastClickType = "scriptOutput"
-                -- lastClickIndex = i
+                -- Store click for potential future interaction (drag/etc) and double-click detection
+                lastClickTime = currentTime
+                lastClickType = "scriptOutput"
+                lastClickIndex = i
                 -- For now, just clicking doesn't do anything here, only dragging *from* physical output
                 return true -- Consume click
             end
@@ -453,7 +477,7 @@ function M.mousepressed(x, y, button)
                         startTime = currentTime
                     }
 
-                    -- REMOVED storing for double click
+                    -- REMOVED storing for double click (Still not needed for physical inputs)
                     -- lastClickTime = currentTime
                     -- lastClickType = "physicalInput"
                     -- lastClickIndex = i
@@ -476,7 +500,7 @@ function M.mousepressed(x, y, button)
                     pendingIndex = i
                     pressX, pressY = lx, ly
 
-                    -- REMOVED storing for double click
+                    -- REMOVED storing for double click (Not needed for physical outputs)
                     -- lastClickTime = currentTime
                     -- lastClickType = "physicalOutput"
                     -- lastClickIndex = i
@@ -486,10 +510,10 @@ function M.mousepressed(x, y, button)
         end
     end
 
-    -- Reset double-click detection if clicking elsewhere (Only relevant for knobs now)
-    -- lastClickTime = 0
-    -- lastClickType = nil
-    -- lastClickIndex = nil
+    -- Reset double-click detection if clicking elsewhere
+    lastClickTime = 0
+    lastClickType = nil
+    lastClickIndex = nil
 
     -- Clear long click candidate if clicking elsewhere
     longClickCandidate = {type = nil, index = nil, startTime = 0}
