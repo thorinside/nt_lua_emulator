@@ -651,89 +651,13 @@ function M.update(dt)
         fontSmall = fontSmall
     })
 
-    -- Initialize time tracking for step and draw calls if not already set
-    if not M.lastStepTime then M.lastStepTime = 0 end
+    -- Initialize time tracking for draw calls if not already set
     if not M.lastDrawTime then M.lastDrawTime = 0 end
-    if not M.stepAccumulator then M.stepAccumulator = 0 end
 
     -- Emulate hardware timing:
-    -- step() called at ~1000Hz (every 1ms)
     -- draw() called at ~30Hz (every 33.33ms)
     local currentTime = love.timer.getTime()
-    local stepInterval = 0.001 -- 1ms for 1000Hz step rate
-    local drawInterval = 0.0333 -- 33.33ms for 30Hz draw rate
-
-    -- Accumulate time for step calls
-    M.stepAccumulator = M.stepAccumulator + dt
-
-    -- Create inputs table to pass to script.step
-    local scriptInputValues = {}
-
-    -- Reset unconnected outputs
-    signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
-
-    -- Call step as many times as needed to match 1000Hz
-    local outputValues
-
-    -- Update input values for each step to check for gate transitions
-    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
-
-    -- Update automated parameters
-    parameterManager.updateAutomatedParameters(currentInputs)
-
-    -- Prepare script input values for each step
-    scriptInputValues = signalProcessor.prepareScriptInputValues(
-                            scriptInputCount, scriptInputAssignments)
-
-    -- Call the script's step function to update outputs
-    outputValues = scriptManager.callScriptStep(stepInterval, scriptInputValues)
-
-    M.stepAccumulator = M.stepAccumulator - stepInterval
-    M.lastStepTime = currentTime
-
-    -- Update outputs with values from script
-    -- Check if outputValues is a valid table - if it's nil or not a table,
-    -- we keep the previous output values unchanged
-    if outputValues and type(outputValues) == "table" then
-        currentOutputs = signalProcessor.updateOutputs(outputValues,
-                                                       scriptOutputAssignments)
-    end
-
-    -- If outputValues is nil or not a table, we don't update the outputs,
-    -- effectively keeping the previous values
-
-    -- Send outputs via OSC
-    if scriptOutputCount > 0 then
-        local oscOutputs = {}
-        for i = 1, scriptOutputCount do
-            local mappedOutput = scriptOutputAssignments[i]
-            if mappedOutput then
-                oscOutputs[i] = currentOutputs[mappedOutput]
-            else
-                oscOutputs[i] = 0
-            end
-        end
-
-        osc_client.sendOutputs(oscOutputs)
-    end
-
-    -- We'll leave the draw function call to Love2D's natural draw cycle
-    -- but we'll only call scriptManager.callScriptDraw() at the correct rate
-    -- by checking time in the draw function
-end
-
-function M.draw()
-    -- Reset line width for consistent drawing
-    love.graphics.setLineWidth(1.0)
-    -- Reset color to white at the beginning to ensure a clean state
-    love.graphics.setColor(1, 1, 1, 1)
-
-    -- Only update the display canvas at 30Hz rate to match hardware
-    local currentTime = love.timer.getTime()
     local drawInterval = 0.0333 -- 33.33ms for 30Hz
-
-    -- Initialize lastDrawTime if not already set
-    if not M.lastDrawTime then M.lastDrawTime = 0 end
 
     -- Only clear and redraw the script content at 30Hz
     if currentTime - M.lastDrawTime >= drawInterval then
@@ -984,6 +908,39 @@ function M.draw()
         -- Draw notifications
         notifications.draw(fontDefault, fontSmall)
     end
+
+    -- Create inputs table to pass to script.step
+    local scriptInputValues = {}
+
+    -- Reset unconnected outputs
+    signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
+
+    -- Call step function
+    local outputValues
+
+    -- Update input values for each step to check for gate transitions
+    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
+
+    -- Update automated parameters
+    parameterManager.updateAutomatedParameters(currentInputs)
+
+    -- Prepare script input values for each step
+    scriptInputValues = signalProcessor.prepareScriptInputValues(
+                            scriptInputCount, scriptInputAssignments)
+
+    -- Call the script's step function with the actual dt
+    outputValues = scriptManager.callScriptStep(dt, scriptInputValues) -- Changed first argument to dt
+
+    -- Update outputs with values from script
+    -- Check if outputValues is a valid table - if it's nil or not a table,
+    if type(outputValues) == "table" then
+        -- Update outputs with values from script
+        for i = 1, scriptOutputCount do
+            if outputValues[i] then
+                currentOutputs[i] = outputValues[i]
+            end
+        end
+    end
 end
 
 function M.keypressed(key)
@@ -1211,6 +1168,270 @@ function M.loadScriptFromPath(filePath)
         -- Show error notification
         showErrorNotification("Failed to load script: " .. filePath)
         return false
+    end
+end
+
+function M.draw()
+    -- Reset line width for consistent drawing
+    love.graphics.setLineWidth(1.0)
+    -- Reset color to white at the beginning to ensure a clean state
+    love.graphics.setColor(1, 1, 1, 1)
+
+    -- Only update the script's display canvas at 30Hz rate to match hardware
+    local currentTime = love.timer.getTime()
+    local drawInterval = 0.0333 -- 33.33ms for 30Hz
+
+    -- Initialize lastDrawTime if not already set
+    if not M.lastDrawTime then M.lastDrawTime = 0 end
+
+    -- Only clear and redraw the script content at 30Hz
+    if currentTime - M.lastDrawTime >= drawInterval then
+        -- 1) Set up the display canvas for script drawing
+        display.clear()
+
+        -- Start drawing to display's canvas with clean state
+        love.graphics.push("all")
+        love.graphics.setCanvas(display.getConfig().canvas)
+        love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
+
+        -- Draw script content to display canvas with error handling
+        scriptManager.callScriptDraw()
+        M.lastDrawTime = currentTime
+
+        -- Reset canvas state
+        love.graphics.setCanvas()
+        love.graphics.pop()
+    end
+
+    -- Always render the display at full frame rate (using the canvas potentially updated above)
+    -- Reset color to white before rendering
+    love.graphics.setColor(1, 1, 1, 1)
+
+    -- If in minimal mode, use minimal mode drawing
+    if windowManager.isMinimalMode() then
+        -- Use minimal mode display
+        love.graphics.clear(0, 0, 0)
+        -- Make sure color is white before rendering the display
+        love.graphics.setColor(1, 1, 1, 1)
+        display.render()
+
+        -- Call minimal mode's draw function
+        MinimalMode.draw()
+    else
+        -- Normal rendering with all UI elements
+
+        -- Make sure color is white before rendering the display
+        love.graphics.setColor(1, 1, 1, 1)
+        display.render()
+
+        -- Draw a border around the display area for better visualization
+        love.graphics.setColor(0.5, 0.5, 0.5, 0.8) -- Light gray, semi-transparent
+        love.graphics.setLineWidth(1)
+        local scaledDisplayWidth, scaledDisplayHeight =
+            windowManager.getScaledDisplayDimensions()
+        love.graphics.rectangle("line", 0, 0, scaledDisplayWidth,
+                                scaledDisplayHeight)
+
+        -- Draw the active overlay
+        if windowManager.getActiveOverlay() == "controls" then
+            -- Draw the controls section below the display
+            controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
+            controls.draw()
+        else
+            -- Draw Script I/O panel (inputs & outputs)
+            local layout = windowManager.getLayoutPositions()
+            io_panel.drawScriptIO({
+                script = script,
+                font = fontSmall,
+                inputCount = scriptInputCount,
+                outputCount = scriptOutputCount,
+                inputAssignments = scriptInputAssignments,
+                outputAssignments = scriptOutputAssignments,
+                ioY = layout.scriptIOPanelY,
+                cellH = 40
+            })
+
+            -- Draw Physical I/O grids
+            local physicalIOBottomY = io_panel.drawPhysicalIO({
+                currentInputs = currentInputs,
+                currentOutputs = currentOutputs,
+                inputClock = signalProcessor.getInputClockTable(),
+                inputPolarity = signalProcessor.getInputPolarityTable(),
+                inputScaling = signalProcessor.getInputScalingTable(),
+                clockBPM = signalProcessor.getClockBPM(),
+                font = fontDefault,
+                physInputX = 40,
+                physInputY = layout.physicalIOStartY,
+                cellW = 40,
+                cellH = 40
+            })
+
+            -- Store the bottom Y position for use by the input handler
+            io_panel.setLastPhysicalIOBottomY(physicalIOBottomY)
+
+            -- Display BPM if there's at least one clock input
+            local hasClockInput = false
+            local inputClock = signalProcessor.getInputClockTable()
+            for i = 1, 12 do
+                if inputClock[i] then
+                    hasClockInput = true
+                    break
+                end
+            end
+
+            if hasClockInput then
+                -- Center BPM text specifically under the bottom row of inputs (9-12)
+                love.graphics.setColor(1, 1, 1, 0.5) -- 50% opacity
+                local bpmText = string.format("BPM %.0f",
+                                              signalProcessor.getClockBPM())
+                local smallFont = love.graphics.newFont(10) -- Smaller font
+                local prevFont = love.graphics.getFont()
+                love.graphics.setFont(smallFont)
+                local textWidth = smallFont:getWidth(bpmText)
+                local buttonWidth = 16
+                local buttonHeight = 16
+                local buttonPadding = 8
+
+                -- Get positions of inputs 9-12 (bottom row)
+                local inputPos = io_panel.getPhysicalInputPositions()
+                local centerX, textY
+
+                if inputPos and #inputPos >= 12 then
+                    -- Calculate center between input 9 and input 12
+                    local leftX = inputPos[9][1]
+                    local rightX = inputPos[12][1]
+                    centerX = (leftX + rightX) / 2 - textWidth / 2
+
+                    -- Calculate Y position with 16px gap under bottom row
+                    local bottomY = inputPos[9][2] + 15 -- Radius of input circle
+                    textY = bottomY + 16 -- 16px gap below the bottom of the circles
+                else
+                    -- Fallback if positions not available
+                    local cellWidth = 40 -- Width of each input cell
+                    local inputSectionWidth = 4 * cellWidth
+                    local inputCenterX = 40 + (inputSectionWidth / 2) -- 40 is physInputX
+                    centerX = inputCenterX - textWidth / 2
+                    textY = physicalIOBottomY + 16
+                end
+
+                -- Calculate button positions
+                local minusButtonX = centerX - buttonWidth - buttonPadding
+                local plusButtonX = centerX + textWidth + buttonPadding
+
+                -- Store BPM button positions for click detection
+                io_panel.setBPMButtonPositions({
+                    minus = {
+                        x = minusButtonX,
+                        y = textY - 2,
+                        width = buttonWidth,
+                        height = buttonHeight
+                    },
+                    plus = {
+                        x = plusButtonX,
+                        y = textY - 2,
+                        width = buttonWidth,
+                        height = buttonHeight
+                    }
+                })
+
+                -- Draw minus button
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.rectangle("fill", minusButtonX, textY - 2,
+                                        buttonWidth, buttonHeight, 3, 3)
+                love.graphics.setColor(0.2, 0.2, 0.2, 1.0)
+                love.graphics.setLineWidth(1.5)
+                love.graphics.line(minusButtonX + 3,
+                                   textY + buttonHeight / 2 - 2,
+                                   minusButtonX + buttonWidth - 3,
+                                   textY + buttonHeight / 2 - 2)
+
+                -- Draw BPM text
+                love.graphics.setColor(1, 1, 1, 0.5)
+                love.graphics.print(bpmText, centerX, textY)
+
+                -- Draw plus button
+                love.graphics.setColor(0.7, 0.7, 0.7, 0.8)
+                love.graphics.rectangle("fill", plusButtonX, textY - 2,
+                                        buttonWidth, buttonHeight, 3, 3)
+                love.graphics.setColor(0.2, 0.2, 0.2, 1.0)
+                love.graphics.line(plusButtonX + 3,
+                                   textY + buttonHeight / 2 - 2,
+                                   plusButtonX + buttonWidth - 3,
+                                   textY + buttonHeight / 2 - 2)
+                love.graphics.line(plusButtonX + buttonWidth / 2, textY + 3 - 2,
+                                   plusButtonX + buttonWidth / 2,
+                                   textY + buttonHeight - 3 - 2)
+
+                love.graphics.setFont(prevFont) -- Restore previous font
+            end
+
+            -- Draw Parameter Knobs
+            parameter_knobs.draw({
+                scriptParameters = parameterManager.getParameters(),
+                displayWidth = display.getConfig().width,
+                panelY = physicalIOBottomY + 60, -- Increased from 50 to 60 to provide more spacing
+                knobRadius = 12,
+                knobSpacing = 80,
+                parameterAutomation = parameterManager.getParameterAutomation(),
+                uiScaleFactor = windowManager.getUIScaleFactor()
+            })
+        end
+
+        -- Draw dragging line if needed
+        local dragState = inputHandler.getDraggingState()
+        if dragState.dragging then
+            love.graphics.setColor(1, 1, 0)
+            local srcX, srcY = 0, 0
+            if dragState.dragType == "input" then
+                local pos = io_panel.getInputPosition(dragState.dragIndex)
+                if pos then srcX, srcY = pos[1], pos[2] end
+            elseif dragState.dragType == "output" then
+                local pos = io_panel.getOutputPosition(dragState.dragIndex)
+                if pos then srcX, srcY = pos[1], pos[2] end
+            end
+            love.graphics.line(srcX, srcY, dragState.dragX, dragState.dragY)
+        end
+
+        -- Draw hot reload indicator LED directly on screen
+        local reloadState = scriptManager.getReloadState()
+        if reloadState.enableAutoReload then
+            if reloadState.reloadBlink and math.floor(time * 4) % 2 == 0 then
+                -- Blink yellow fast when recently reloaded
+                love.graphics.setColor(1, 1, 0, 0.8)
+            else
+                -- Steady green when enabled
+                love.graphics.setColor(0, 1, 0, 0.8)
+            end
+        else
+            -- Gray when disabled
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+        end
+
+        -- Draw hot reload LED at bottom right of screen
+        love.graphics.circle("fill", love.graphics.getWidth() - 16,
+                             love.graphics.getHeight() - 6, 3)
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.circle("line", love.graphics.getWidth() - 16,
+                             love.graphics.getHeight() - 6, 3)
+
+        -- Draw OSC indicator LED
+        if osc_client.isEnabled() then
+            -- Green when enabled
+            love.graphics.setColor(0, 1, 0, 0.8)
+        else
+            -- Gray when disabled
+            love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+        end
+
+        -- Draw OSC LED at bottom right of screen (to the right of hot reload LED)
+        love.graphics.circle("fill", love.graphics.getWidth() - 6,
+                             love.graphics.getHeight() - 6, 3)
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.circle("line", love.graphics.getWidth() - 6,
+                             love.graphics.getHeight() - 6, 3)
+
+        -- Draw notifications
+        notifications.draw(fontDefault, fontSmall)
     end
 end
 
