@@ -614,9 +614,6 @@ function M.mousereleased(x, y, button)
 
                 if pressDuration >= longClickThreshold then
                     -- LONG CLICK: Reset the input to default
-                    print("Long click RESET detected on input", pendingIndex,
-                          "Duration:", pressDuration) -- Debug
-
                     local changed = false
                     if M.signalProcessor and M.signalProcessor.setInputClock then
                         if M.signalProcessor.getInputClock(pendingIndex) ~=
@@ -645,10 +642,6 @@ function M.mousereleased(x, y, button)
 
                 else
                     -- SHORT CLICK: Perform single-click action (cycle/trigger)
-                    print("Short click detected on input", pendingIndex,
-                          "Duration:", pressDuration) -- Debug
-
-                    -- Check if this input is connected to a kTrigger script input
                     local isTriggerInput = false
                     local scriptInputIdx = nil
                     if M.scriptInputAssignments and M.script and M.script.inputs then
@@ -680,22 +673,15 @@ function M.mousereleased(x, y, button)
                                                  scriptInputIdx)
                             end
                         end
-                        print("Trigger pulse sent for input", pendingIndex,
-                              "-> script input", scriptInputIdx) -- Debug
                     else
                         -- For non-trigger inputs, cycle through modes immediately
                         M.cycleInputMode(pendingIndex)
-                        print("Cycle mode called for input", pendingIndex) -- Debug
                     end
                 end
                 -- Clear the candidate immediately after processing click/long-click
                 longClickCandidate = {type = nil, index = nil, startTime = 0}
             else
                 -- Click released on a different input than pressed, or candidate invalid - ignore
-                print(
-                    "Mismatched release/candidate or invalid candidate for input",
-                    pendingIndex) -- Debug
-                -- Ensure candidate is cleared anyway
                 longClickCandidate = {type = nil, index = nil, startTime = 0}
             end
         end
@@ -1069,29 +1055,28 @@ function M.cycleInputMode(inputIdx)
     local currentPolarity = M.signalProcessor.getInputPolarity(inputIdx)
 
     -- Print the state *before* changing it
-    print(string.format(
-              "CycleInputMode: Input %d - Current State: Clock=%s, Polarity=%s",
-              inputIdx, tostring(isCurrentlyClock), tostring(currentPolarity)))
+    -- print(string.format("CycleInputMode: Input %d - Current State: Clock=%s, Polarity=%s",
+    --                    inputIdx, tostring(isCurrentlyClock), tostring(currentPolarity)))
 
     if not isCurrentlyClock then
         -- Currently CV mode (Bipolar or Unipolar)
         if currentPolarity == kBipolar then
             -- Bipolar CV -> Clock
-            print("  -> Transitioning to Clock") -- Debug
+            -- print("  -> Transitioning to Clock") -- Debug
             M.signalProcessor.setInputClock(inputIdx, true)
             M.signalProcessor.setInputPolarity(inputIdx, kBipolar) -- Reset polarity for Clock
             M.signalProcessor.setInputScaling(inputIdx, 1.0) -- Reset scaling for Clock
             -- print("Input " .. inputIdx .. ": Bipolar CV -> Clock") -- Debug
         elseif currentPolarity == kUnipolar then
             -- Unipolar CV -> Bipolar CV
-            print("  -> Transitioning to Bipolar CV") -- Debug
+            -- print("  -> Transitioning to Bipolar CV") -- Debug
             M.signalProcessor.setInputClock(inputIdx, false) -- Ensure clock is off
             M.signalProcessor.setInputPolarity(inputIdx, kBipolar)
             M.signalProcessor.setInputScaling(inputIdx, 1.0) -- Reset scaling when returning to Bipolar
             -- print("Input " .. inputIdx .. ": Unipolar CV -> Bipolar CV") -- Debug
         else
             -- Unknown polarity state? Default to Bipolar CV
-            print("  -> Unknown CV state, defaulting to Bipolar CV") -- Debug
+            -- print("  -> Unknown CV state, defaulting to Bipolar CV") -- Debug
             M.signalProcessor.setInputClock(inputIdx, false)
             M.signalProcessor.setInputPolarity(inputIdx, kBipolar)
             M.signalProcessor.setInputScaling(inputIdx, 1.0)
@@ -1100,7 +1085,7 @@ function M.cycleInputMode(inputIdx)
     else
         -- Currently Clock mode
         -- Clock -> Unipolar CV
-        print("  -> Transitioning to Unipolar CV") -- Debug
+        -- print("  -> Transitioning to Unipolar CV") -- Debug
         M.signalProcessor.setInputClock(inputIdx, false)
         M.signalProcessor.setInputPolarity(inputIdx, kUnipolar)
         -- Scaling was reset when entering clock mode, keep it reset (1.0)
