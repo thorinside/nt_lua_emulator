@@ -874,7 +874,13 @@ function M.wheelmoved(x, y)
                 local fineControlMultiplier = 0.1 -- Use 10% step for fine control
                 local newValue = sp.current -- Initialize with current value
 
-                -- Adjust step size based on parameter type
+                -- Add debug log before calculation
+                local debug_utils = require("modules.debug_utils")
+                debug_utils.debugLog(string.format(
+                                         "[InputHandler.wheelmoved] Knob %d (float, scale: %s) START - Current: %.4f, Dir: %d",
+                                         i, tostring(sp.scale), sp.current,
+                                         direction))
+
                 if sp.type == "float" then
                     local range = sp.max - sp.min
                     if range <= 0 then range = 1 end -- Avoid division by zero for fixed values
@@ -912,7 +918,12 @@ function M.wheelmoved(x, y)
                         newValue = sp.current + direction * step
                     end
                     -- Clamp float value
+                    local valueBeforeClamp = newValue
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
+
+                    debug_utils.debugLog(string.format(
+                                             "[InputHandler.wheelmoved] Knob %d (float) CALC - BeforeClamp: %.4f, AfterClamp: %.4f, Step: %.4f",
+                                             i, valueBeforeClamp, newValue, step))
 
                     -- Decide action based on scale
                     if sp.scale == kBy10 or sp.scale == kBy100 or sp.scale ==
@@ -920,6 +931,11 @@ function M.wheelmoved(x, y)
                         -- Update scaled floats directly
                         if newValue ~= sp.current then
                             sp.current = newValue
+
+                            debug_utils.debugLog(string.format(
+                                                     "[InputHandler.wheelmoved] Knob %d (float, scaled) SET DIRECT - NewValue: %.4f",
+                                                     i, newValue))
+
                             if M.parameterAutomation and
                                 M.parameterAutomation[i] then
                                 sp.baseValue = newValue
@@ -930,9 +946,18 @@ function M.wheelmoved(x, y)
                     else
                         -- Set target for smoothing for non-scaled floats
                         parameterTargetValues[i] = newValue
+                        debug_utils.debugLog(string.format(
+                                                 "[InputHandler.wheelmoved] Knob %d (float, non-scaled) SET TARGET - TargetValue: %.4f",
+                                                 i, newValue))
                     end
 
                 elseif sp.type == "integer" then
+                    -- Add debug log before calculation
+                    local debug_utils = require("modules.debug_utils")
+                    debug_utils.debugLog(string.format(
+                                             "[InputHandler.wheelmoved] Knob %d (integer) START - Current: %d, Dir: %d",
+                                             i, sp.current, direction))
+
                     step = 1 -- Step by 1 for integers
                     local largeStep = 5 -- Larger step for shift+scroll on integers
 
@@ -951,14 +976,26 @@ function M.wheelmoved(x, y)
                     -- Calculate new value using the determined step
                     newValue = sp.current + direction * step
 
+                    local valueBeforeClamp = newValue
                     -- Clamp integer value first
                     newValue = math.max(sp.min, math.min(sp.max, newValue))
                     -- Then round to nearest integer
+                    local valueBeforeRound = newValue
                     newValue = math.floor(newValue + 0.5)
+
+                    debug_utils.debugLog(string.format(
+                                             "[InputHandler.wheelmoved] Knob %d (integer) CALC - BeforeClamp: %d, AfterClamp: %d, AfterRound: %d, Step: %d",
+                                             i, valueBeforeClamp,
+                                             valueBeforeRound, newValue, step))
 
                     -- Update Integer parameters directly (no smoothing for discrete steps)
                     if newValue ~= sp.current then
                         sp.current = newValue
+
+                        debug_utils.debugLog(string.format(
+                                                 "[InputHandler.wheelmoved] Knob %d (integer) SET DIRECT - NewValue: %d",
+                                                 i, newValue))
+
                         -- If parameter is automated, also update baseValue
                         if M.parameterAutomation and M.parameterAutomation[i] then
                             sp.baseValue = newValue
@@ -970,6 +1007,13 @@ function M.wheelmoved(x, y)
 
                 elseif sp.type == "enum" then
                     if sp.values then
+                        -- Add debug log before calculation
+                        local debug_utils = require("modules.debug_utils")
+                        debug_utils.debugLog(string.format(
+                                                 "[InputHandler.wheelmoved] Knob %d (enum) START - Current: %d, Dir: %d, Accum: %.2f",
+                                                 i, sp.current, direction,
+                                                 enumWheelAccumulator))
+
                         local totalValues = #sp.values
                         local changedEnum = false -- Flag to track if enum value actually changes
                         if totalValues > 0 then
@@ -1004,9 +1048,20 @@ function M.wheelmoved(x, y)
                             -- Clamp enum index
                             newValue = math.max(1,
                                                 math.min(totalValues, newValue))
+
+                            debug_utils.debugLog(string.format(
+                                                     "[InputHandler.wheelmoved] Knob %d (enum) CALC - BeforeClamp: %d, AfterClamp: %d, ActualDir: %d",
+                                                     i, newValue, newValue,
+                                                     actualDirection))
+
                             -- Update Enum parameters directly (no smoothing for discrete steps)
                             if newValue ~= sp.current then
                                 sp.current = newValue
+
+                                debug_utils.debugLog(string.format(
+                                                         "[InputHandler.wheelmoved] Knob %d (enum) SET DIRECT - NewValue: %d",
+                                                         i, newValue))
+
                                 changedEnum = true -- Mark that value changed
                                 -- If parameter is automated, also update baseValue
                                 if M.parameterAutomation and

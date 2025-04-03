@@ -110,6 +110,10 @@ function M.setupControlCallbacks(scriptObj)
         end,
         onPotChange = function(potIndex, value)
             if scriptObj then
+                local debug_utils = require("modules.debug_utils")
+                debug_utils.debugLog(string.format(
+                                         "[ScriptManager] onPotChange - potIndex: %d, value (0-1): %.4f",
+                                         potIndex, value))
                 local functionName = "pot" .. potIndex .. "Turn"
                 if scriptObj[functionName] then
                     M.safeScriptCall(scriptObj[functionName], scriptObj, value)
