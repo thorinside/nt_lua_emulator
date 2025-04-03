@@ -133,6 +133,12 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
     -- Set a parameter value using normalized range [0.0,1.0]
     _G.setParameterNormalized = function(algorithm, parameter, normalizedValue)
+        -- Add debug logs here
+        local debug_utils = require("modules.debug_utils")
+        debug_utils.debugLog(string.format(
+                                 "[_G.setParameterNormalized] alg: %d, param: %d, normalizedValue: %.4f",
+                                 algorithm, parameter, normalizedValue))
+
         -- In the emulator, we only have one algorithm, so we ignore the algorithm index
         -- Adjust the parameter index based on parameterOffset
         local paramIndex = parameter - newScript.parameterOffset
@@ -141,13 +147,41 @@ function M.loadScript(scriptPath, createDefaultMappings)
             if sp then
                 -- Map normalized value [0.0,1.0] to parameter range [min,max]
                 local value = sp.min + (normalizedValue * (sp.max - sp.min))
-                -- Ensure the value is within bounds
-                if sp.type == "integer" then
-                    value = math.floor(value)
+                debug_utils.debugLog(string.format(
+                                         "[_G.setParameterNormalized] Mapped value before clamp/floor: %.4f (min: %.2f, max: %.2f, type: %s)",
+                                         value, sp.min, sp.max, sp.type))
+
+                -- Add specific handling for enum type
+                if sp.type == "enum" then
+                    -- Map normalized value to the closest integer index
+                    value = math.floor(value + 0.5) -- Round to nearest integer index
+                    -- Ensure value is clamped within the valid index range [min, max]
+                    value = math.max(sp.min, math.min(sp.max, value))
+                    debug_utils.debugLog(string.format(
+                                             "[_G.setParameterNormalized] Enum value after rounding/clamping: %d",
+                                             value))
+                else
+                    -- Ensure the value is within bounds for other types (integer, float)
+                    if sp.type == "integer" then
+                        value = math.floor(value)
+                    end
+                    value = math.max(sp.min, math.min(sp.max, value))
                 end
-                value = math.max(sp.min, math.min(sp.max, value))
+
                 sp.current = value
+                debug_utils.debugLog(string.format(
+                                         "[_G.setParameterNormalized] Final value set: %.4f",
+                                         value))
+            else
+                debug_utils.debugLog(
+                    "[_G.setParameterNormalized] Error: Script parameter object not found for index: " ..
+                        paramIndex)
             end
+        else
+            debug_utils.debugLog(
+                "[_G.setParameterNormalized] Error: Calculated paramIndex out of bounds: " ..
+                    paramIndex .. " (parameter: " .. parameter .. ", offset: " ..
+                    newScript.parameterOffset .. ")")
         end
     end
 
