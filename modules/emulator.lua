@@ -941,6 +941,9 @@ function M.update(dt)
             end
         end
     end
+
+    -- Send outputs via OSC
+    osc_client.sendOutputs(currentOutputs)
 end
 
 function M.keypressed(key)

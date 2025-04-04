@@ -116,26 +116,6 @@ function osc_client.sendOutputs(outputs)
 
     lastSendTime = currentTime
 
-    -- Check if outputs have changed since last send
-    local hasChanged = false
-    if not lastSentOutputs or #outputs ~= #lastSentOutputs then
-        hasChanged = true
-    else
-        for i = 1, #outputs do
-            -- Compare with tolerance for floats
-            if math.abs(outputs[i] - lastSentOutputs[i]) >
-                OSC_VALUE_CHANGE_THRESHOLD then
-                hasChanged = true
-                break
-            end
-        end
-    end
-
-    -- Only send if values have changed
-    if not hasChanged then
-        return -- No change, skip sending
-    end
-
     -- Debug output summary if enabled
     if isDebugMode() then
         debugLog("Sending OSC values:", #outputs, "outputs")
