@@ -114,31 +114,25 @@ end
 local disableFunctionProfiling = nil
 
 -- Add this to the module's public interface
-function M.enableMemoryProfiling()
-    debug_utils.setDebugEnabled(true)
-    debug_utils.initMemoryProfiling()
-    debug_utils.setGCMode("setpause", 120) -- Less frequent GC
-    disableFunctionProfiling = enableFunctionProfiling()
-    debug_utils.debugLog("Memory profiling enabled")
-    return true
-end
-
-function M.disableMemoryProfiling()
-    if disableFunctionProfiling then
-        disableFunctionProfiling()
-        disableFunctionProfiling = nil
-    end
-    debug_utils.setGCMode("setpause", 100) -- Default GC behavior
-    debug_utils.printMemoryReport() -- Final report
-    debug_utils.setDebugEnabled(false)
-    debug_utils.debugLog("Memory profiling disabled")
-    return true
-end
-
--- Toggle script-specific memory tracking
-function M.toggleScriptMemoryTracking()
-    return scriptManager.toggleScriptMemoryTracking()
-end
+-- Removed: function M.enableMemoryProfiling()
+--     debug_utils.setDebugEnabled(true)
+--     debug_utils.initMemoryProfiling()
+--     debug_utils.setGCMode("setpause", 120) -- Less frequent GC
+--     disableFunctionProfiling = enableFunctionProfiling()
+--     debug_utils.debugLog("Memory profiling enabled")
+--     return true
+-- end
+--
+-- Removed: function M.disableMemoryProfiling()
+--     if disableFunctionProfiling then
+--         disableFunctionProfiling()
+--         disableFunctionProfiling = nil
+--     end
+--     debug_utils.setGCMode("setpause", 100) -- Default GC behavior
+--     debug_utils.printMemoryReport() -- Final report
+--     debug_utils.setDebugEnabled(false)
+--     debug_utils.debugLog("Memory profiling disabled")
+--     return true
 
 --------------------------------------------------------------------------------
 -- Configuration
@@ -652,31 +646,30 @@ function M.update(dt)
     })
 
     -- Initialize time tracking for draw calls if not already set
-    if not M.lastDrawTime then M.lastDrawTime = 0 end
+    -- Commented out: if not M.lastDrawTime then M.lastDrawTime = 0 end
 
     -- Emulate hardware timing:
-    -- draw() called at ~30Hz (every 33.33ms)
     local currentTime = love.timer.getTime()
-    local drawInterval = 0.0333 -- 33.33ms for 30Hz
+    -- Commented out: local drawInterval = 0.0333
 
     -- Only clear and redraw the script content at 30Hz
-    if currentTime - M.lastDrawTime >= drawInterval then
-        -- 1) Set up the display canvas for script drawing
-        display.clear()
+    -- Commented out: if currentTime - M.lastDrawTime >= drawInterval then
+    -- 1) Set up the display canvas for script drawing
+    display.clear()
 
-        -- Start drawing to display's canvas with clean state
-        love.graphics.push("all")
-        love.graphics.setCanvas(display.getConfig().canvas)
-        love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
+    -- Start drawing to display's canvas with clean state
+    love.graphics.push("all")
+    love.graphics.setCanvas(display.getConfig().canvas)
+    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
 
-        -- Draw script content to display canvas with error handling
-        scriptManager.callScriptDraw()
-        M.lastDrawTime = currentTime
+    -- Draw script content to display canvas with error handling
+    scriptManager.callScriptDraw()
+    -- Commented out: M.lastDrawTime = currentTime
 
-        -- Reset canvas state
-        love.graphics.setCanvas()
-        love.graphics.pop()
-    end
+    -- Reset canvas state
+    love.graphics.setCanvas()
+    love.graphics.pop()
+    -- Commented out: end
 
     -- Always render the display at full frame rate
     -- Reset color to white before rendering
@@ -1180,33 +1173,33 @@ function M.draw()
     -- Reset color to white at the beginning to ensure a clean state
     love.graphics.setColor(1, 1, 1, 1)
 
-    -- Only update the script's display canvas at 30Hz rate to match hardware
-    local currentTime = love.timer.getTime()
-    local drawInterval = 0.0333 -- 33.33ms for 30Hz
-
     -- Initialize lastDrawTime if not already set
-    if not M.lastDrawTime then M.lastDrawTime = 0 end
+    -- Commented out: if not M.lastDrawTime then M.lastDrawTime = 0 end
+
+    -- Emulate hardware timing:
+    local currentTime = love.timer.getTime()
+    -- Commented out: local drawInterval = 0.0333
 
     -- Only clear and redraw the script content at 30Hz
-    if currentTime - M.lastDrawTime >= drawInterval then
-        -- 1) Set up the display canvas for script drawing
-        display.clear()
+    -- Commented out: if currentTime - M.lastDrawTime >= drawInterval then
+    -- 1) Set up the display canvas for script drawing
+    display.clear()
 
-        -- Start drawing to display's canvas with clean state
-        love.graphics.push("all")
-        love.graphics.setCanvas(display.getConfig().canvas)
-        love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
+    -- Start drawing to display's canvas with clean state
+    love.graphics.push("all")
+    love.graphics.setCanvas(display.getConfig().canvas)
+    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
 
-        -- Draw script content to display canvas with error handling
-        scriptManager.callScriptDraw()
-        M.lastDrawTime = currentTime
+    -- Draw script content to display canvas with error handling
+    scriptManager.callScriptDraw()
+    -- Commented out: M.lastDrawTime = currentTime
 
-        -- Reset canvas state
-        love.graphics.setCanvas()
-        love.graphics.pop()
-    end
+    -- Reset canvas state
+    love.graphics.setCanvas()
+    love.graphics.pop()
+    -- Commented out: end
 
-    -- Always render the display at full frame rate (using the canvas potentially updated above)
+    -- Always render the display at full frame rate
     -- Reset color to white before rendering
     love.graphics.setColor(1, 1, 1, 1)
 

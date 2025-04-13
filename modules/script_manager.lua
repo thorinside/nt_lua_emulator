@@ -1,7 +1,6 @@
 -- script_manager.lua
 -- Module for managing script execution, callbacks, and control interactions
 local M = {} -- Module table
-local script_utils = require("modules.script_utils")
 
 -- Local state variables
 local script = nil
@@ -10,7 +9,6 @@ local scriptLastModified = 0
 local reloadBlink = false
 local lastReloadTime = 0
 local enableAutoReload = true
-local scriptMemoryTracking = false
 
 -- Initialize the script manager
 function M.init(deps)
@@ -214,30 +212,14 @@ end
 -- Call the script's step function
 function M.callScriptStep(dt, inputValues)
     if not script or not script.step then return nil end
-
-    if scriptMemoryTracking then
-        -- When memory tracking is enabled, make sure we preserve nil returns
-        local result = script_utils.trackScriptStepMemory(script, dt,
-                                                          inputValues)
-        -- Ensure nil is passed through correctly
-        return result
-    else
-        -- When directly calling safeScriptCall, make sure nil returns are handled correctly
-        local result = M.safeScriptCall(script.step, script, dt, inputValues)
-        -- Ensure nil is passed through correctly
-        return result
-    end
+    local result = M.safeScriptCall(script.step, script, dt, inputValues)
+    return result
 end
 
 -- Call the script's draw function
 function M.callScriptDraw()
     if not script or not script.draw then return false end
-
-    if scriptMemoryTracking then
-        return script_utils.trackScriptDrawMemory(script)
-    else
-        return M.safeScriptCall(script.draw, script)
-    end
+    return M.safeScriptCall(script.draw, script)
 end
 
 -- Get script I/O counts
@@ -262,49 +244,16 @@ function M.getScriptIOCounts()
     return inputCount, outputCount
 end
 
--- Toggle script memory profiling
-function M.toggleScriptMemoryTracking()
-    scriptMemoryTracking = not scriptMemoryTracking
-
-    if scriptMemoryTracking then
-        script_utils.startScriptMemoryTracking()
-        print(
-            "Script memory profiling enabled - tracking step(), draw(), gate(), and trigger() functions")
-    else
-        -- Get report before stopping
-        local report = script_utils.getScriptMemoryReport()
-        script_utils.printScriptMemoryReport()
-        script_utils.stopScriptMemoryTracking()
-        return report
-    end
-
-    return scriptMemoryTracking
-end
-
--- Check if script memory tracking is enabled
-function M.isScriptMemoryTrackingEnabled() return scriptMemoryTracking end
-
--- Call the script's gate function with memory tracking
+-- Call the script's gate function
 function M.callScriptGate(params)
     if not script or not script.gate then return nil end
-
-    if scriptMemoryTracking then
-        return script_utils.trackScriptGateMemory(script, params)
-    else
-        return
-            M.safeScriptCall(script.gate, script, params.input, params.rising)
-    end
+    return M.safeScriptCall(script.gate, script, params.input, params.rising)
 end
 
--- Call the script's trigger function with memory tracking
+-- Call the script's trigger function
 function M.callScriptTrigger(params)
     if not script or not script.trigger then return nil end
-
-    if scriptMemoryTracking then
-        return script_utils.trackScriptTriggerMemory(script, params)
-    else
-        return M.safeScriptCall(script.trigger, script, params.input)
-    end
+    return M.safeScriptCall(script.trigger, script, params.input)
 end
 
 return M
