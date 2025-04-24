@@ -190,15 +190,20 @@ function M.updateTriggerPulses(scriptInputAssignments, script)
                         -- Only call during the first frame of the pulse
                         if pulseElapsed < 0.02 then
                             -- Ensure we pass the script input index (not the physical input)
+                            local outputValues = nil
                             if M.scriptManager then
-                                M.scriptManager.callScriptTrigger({
+                                outputValues = M.scriptManager
+                                                   .callScriptTrigger({
                                     input = scriptInputIdx
                                 })
                             else
                                 -- Direct call with script input index
-                                M.safeScriptCall(script.trigger, script,
-                                                 scriptInputIdx)
+                                outputValues =
+                                    M.safeScriptCall(script.trigger, script,
+                                                     scriptInputIdx)
                             end
+                            -- Process the returned output values
+                            M.updateOutputs(outputValues, scriptInputAssignments)
                         end
                     end
                 end
@@ -254,17 +259,22 @@ function M.updateInputs(scriptInputAssignments, script)
                             local rising = clockState -- true when going from low to high
 
                             -- We need to ensure the parameters are passed correctly and consistently
+                            local outputValues = nil
                             if M.scriptManager then
-                                -- For script manager version, ensure we're passing the parameters correctly
-                                M.scriptManager.callScriptGate({
-                                    input = scriptInputIdx,
-                                    rising = rising
-                                })
+                                -- For script manager version, ensure we\'re passing the parameters correctly
+                                outputValues =
+                                    M.scriptManager.callScriptGate({
+                                        input = scriptInputIdx,
+                                        rising = rising
+                                    })
                             else
                                 -- Direct call - must ensure parameters are in the right order (script obj, input, rising)
-                                M.safeScriptCall(script.gate, script,
-                                                 scriptInputIdx, rising)
+                                outputValues =
+                                    M.safeScriptCall(script.gate, script,
+                                                     scriptInputIdx, rising)
                             end
+                            -- Process the returned output values
+                            M.updateOutputs(outputValues, scriptInputAssignments)
                         end
                     end
                 end

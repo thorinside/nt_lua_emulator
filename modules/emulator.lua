@@ -248,6 +248,18 @@ local function saveIOState(forceSave)
         if scriptState then state.scriptState = scriptState end
     end
 
+    -- Save current parameter values
+    local currentParams = parameterManager.getParameters()
+    if currentParams and #currentParams > 0 then
+        state.parameterValues = {}
+        for i, param in ipairs(currentParams) do
+            if param.name and param.current ~= nil then
+                state.parameterValues[param.name] = param.current
+            end
+        end
+        print("Saved parameter values to state.")
+    end
+
     ioState.saveIOState(state, forceSave)
 end
 
@@ -299,6 +311,41 @@ local function loadIOState()
             end
         end
         print("Input modes and scaling restored from state file")
+    end
+
+    -- Restore parameter values if present and parameters are initialized
+    if state.parameterValues then
+        local currentParams = parameterManager.getParameters()
+        if currentParams and #currentParams > 0 then
+            local restoredCount = 0
+            local paramNameToIndex = {}
+            for i, p in ipairs(currentParams) do
+                if p.name then paramNameToIndex[p.name] = i end
+            end
+
+            for name, savedValue in pairs(state.parameterValues) do
+                local paramIndex = paramNameToIndex[name]
+                if paramIndex then
+                    local success, errMsg =
+                        parameterManager.updateParameterValue(paramIndex,
+                                                              savedValue)
+                    if success then
+                        restoredCount = restoredCount + 1
+                    else
+                        print(
+                            "Warning: Failed to restore parameter '" .. name ..
+                                "': " .. (errMsg or "Unknown error"))
+                    end
+                end
+            end
+            if restoredCount > 0 then
+                print("Restored " .. restoredCount ..
+                          " parameter value(s) from state file.")
+            end
+        else
+            print(
+                "Parameter values found in state, but script parameters not yet initialized.")
+        end
     end
 
     -- Load the clock BPM if present
