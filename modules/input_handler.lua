@@ -808,41 +808,83 @@ function M.wheelmoved(x, y)
             local dx = lx - pos[1]
             local dy = ly - pos[2]
             if math.sqrt(dx * dx + dy * dy) <= 15 then
-                -- We're over a physical input, adjust its scaling with mouse wheel
-                if M.inputClock[i] then
-                    -- For clock inputs, modify the BPM
-                    local bpmDelta = y > 0 and 1 or -1
-                    if love.keyboard.isDown("lshift") or
-                        love.keyboard.isDown("rshift") then
-                        bpmDelta = bpmDelta * 0.1 -- Fine control with shift
-                    end
+                -- Ensure signalProcessor and required functions exist
+                if M.signalProcessor and M.signalProcessor.getInputClock and
+                    M.signalProcessor.getInputScaling and
+                    M.signalProcessor.setInputScaling then
 
-                    local newBPM = M.clockBPM + bpmDelta
-                    newBPM = math.max(M.minBPM, math.min(M.maxBPM, newBPM))
+                    if M.signalProcessor.getInputClock(i) then
+                        -- Handle Clock input: Modify BPM
+                        -- (Assuming M.clockBPM state is managed elsewhere correctly)
+                        local bpmDelta = y > 0 and 1 or -1
+                        if love.keyboard.isDown("lshift") or
+                            love.keyboard.isDown("rshift") then
+                            bpmDelta = bpmDelta * 0.1
+                        end
+                        local currentBPM = M.clockBPM
+                        local newBPM = currentBPM + bpmDelta
+                        newBPM = math.max(M.minBPM, math.min(M.maxBPM, newBPM))
+                        if newBPM ~= currentBPM then
+                            -- TODO: Ideally, BPM should also be set via signalProcessor if managed there
+                            -- For now, assume direct modification of M.clockBPM is intended
+                            M.clockBPM = newBPM
+                            M.markMappingsChanged()
+                        end
+                    else
+                        -- Not a clock input, check if it's a trigger input
+                        local isTriggerInput = false
+                        local scriptInputIdx = nil
+                        -- Find the script input index mapped to this physical input
+                        if M.scriptInputAssignments then
+                            for sIdx, physIdx in pairs(M.scriptInputAssignments) do
+                                if physIdx == i then
+                                    scriptInputIdx = sIdx
+                                    break
+                                end
+                            end
+                        end
+                        -- Check the script's definition for this input index
+                        if scriptInputIdx and M.script and M.script.inputs and
+                            type(M.script.inputs) == "table" and
+                            M.script.inputs[scriptInputIdx] == kTrigger then
+                            isTriggerInput = true
+                        end
 
-                    if newBPM ~= M.clockBPM then
-                        M.clockBPM = newBPM
-                        M.markMappingsChanged() -- Mark as changed when BPM changes
-                    end
+                        if not isTriggerInput then
+                            -- It's not Clock and not Trigger, so it must be a CV input (Uni/Bipolar)
+                            -- Proceed with scaling logic using signalProcessor functions
+                            local currentScale = M.signalProcessor
+                                                     .getInputScaling(i)
+                            if currentScale ~= nil then -- Check if scaling value exists
+                                local scaleDelta = y > 0 and 0.05 or -0.05
+                                if love.keyboard.isDown("lshift") or
+                                    love.keyboard.isDown("rshift") then
+                                    scaleDelta = scaleDelta * 0.2
+                                end
+                                local newScale = currentScale + scaleDelta
+                                newScale =
+                                    math.max(0.0, math.min(1.0, newScale))
+
+                                if newScale ~= currentScale then
+                                    M.signalProcessor.setInputScaling(i,
+                                                                      newScale)
+                                    M.markMappingsChanged()
+                                end
+                            else
+                                print(
+                                    "Warning: Could not get input scaling for input " ..
+                                        i)
+                            end
+                            -- else: It's a trigger input, do nothing on wheel scroll
+                        end
+                    end -- end check for clock input
                 else
-                    -- For normal inputs, adjust scaling
-                    local scaleDelta = y > 0 and 0.05 or -0.05
-                    if love.keyboard.isDown("lshift") or
-                        love.keyboard.isDown("rshift") then
-                        scaleDelta = scaleDelta * 0.2 -- Fine control with shift
-                    end
+                    print(
+                        "Warning: Signal processor functions not available for wheel scroll.")
+                end -- end check for signalProcessor functions
 
-                    local newScale = M.inputScaling[i] + scaleDelta
-                    newScale = math.max(0.0, math.min(1.0, newScale))
-
-                    if newScale ~= M.inputScaling[i] then
-                        M.inputScaling[i] = newScale
-                        M.markMappingsChanged() -- Mark as changed when scaling changes
-                    end
-                end
-
-                return true
-            end
+                return true -- Event handled (or ignored intentionally)
+            end -- end check for mouse over input
         end
     end
 
