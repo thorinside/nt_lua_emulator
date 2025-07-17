@@ -576,7 +576,7 @@ function M.update(dt)
 
     -- Update time counter and trigger pulse states
     time = signalProcessor.updateTime(dt)
-    signalProcessor.updateTriggerPulses(scriptInputAssignments, script)
+    signalProcessor.updateTriggerPulses(scriptInputAssignments, script, scriptOutputAssignments)
 
     -- Update active state based on current overlay and minimal mode
     controls.setActive(windowManager.getActiveOverlay() == "controls" and
@@ -959,7 +959,7 @@ function M.update(dt)
     local outputValues
 
     -- Update input values for each step to check for gate transitions
-    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script)
+    currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script, scriptOutputAssignments)
 
     -- Update automated parameters
     parameterManager.updateAutomatedParameters(currentInputs)
@@ -972,12 +972,20 @@ function M.update(dt)
     outputValues = scriptManager.callScriptStep(dt, scriptInputValues) -- Changed first argument to dt
 
     -- Update outputs with values from script
+    -- First, reset all physical outputs to 0
+    for i = 1, 8 do
+        currentOutputs[i] = 0
+    end
+    
     -- Check if outputValues is a valid table - if it's nil or not a table,
     if type(outputValues) == "table" then
-        -- Update outputs with values from script
+        -- Update outputs with values from script using proper mappings
         for i = 1, scriptOutputCount do
             if outputValues[i] then
-                currentOutputs[i] = outputValues[i]
+                local physicalOutput = scriptOutputAssignments[i]
+                if physicalOutput then
+                    currentOutputs[physicalOutput] = outputValues[i]
+                end
             end
         end
     end

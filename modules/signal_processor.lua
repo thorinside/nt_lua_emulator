@@ -172,7 +172,7 @@ function M.triggerPulse(inputIndex)
 end
 
 -- Update trigger pulse states
-function M.updateTriggerPulses(scriptInputAssignments, script)
+function M.updateTriggerPulses(scriptInputAssignments, script, scriptOutputAssignments)
     for i = 1, 12 do
         if triggerPulseActive[i] then
             local pulseElapsed = time - (triggerPulseTimes[i] or 0)
@@ -203,7 +203,7 @@ function M.updateTriggerPulses(scriptInputAssignments, script)
                                                      scriptInputIdx)
                             end
                             -- Process the returned output values
-                            M.updateOutputs(outputValues, scriptInputAssignments)
+                            M.updateOutputs(outputValues, scriptOutputAssignments)
                         end
                     end
                 end
@@ -213,7 +213,7 @@ function M.updateTriggerPulses(scriptInputAssignments, script)
 end
 
 -- Update input values
-function M.updateInputs(scriptInputAssignments, script)
+function M.updateInputs(scriptInputAssignments, script, scriptOutputAssignments)
     -- Process all 12 physical inputs
     -- Ensure clockBPM is never zero to prevent division by zero
     local safeBPM = math.max(minBPM, clockBPM)
@@ -274,7 +274,7 @@ function M.updateInputs(scriptInputAssignments, script)
                                                      scriptInputIdx, rising)
                             end
                             -- Process the returned output values
-                            M.updateOutputs(outputValues, scriptInputAssignments)
+                            M.updateOutputs(outputValues, scriptOutputAssignments)
                         end
                     end
                 end
