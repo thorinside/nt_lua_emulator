@@ -109,8 +109,9 @@ function M.pollMessages()
     if midi.getMessage then
         local a, b, c, d = midi.getMessage(inputPortIndex)
         if a then
-            -- Return as a table matching script expectation
-            return {a, b, c, d}
+            -- MIDI message received
+            -- Return as a table matching script expectation (only first 3 bytes)
+            return {a, b, c}
         end
     end
     

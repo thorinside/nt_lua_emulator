@@ -1,14 +1,18 @@
 {
+  "minimalMode":false,
+  "midi":{
+    "enabled":true,
+    "selectedInput":1
+  },
   "osc":{
-    "sendInterval":0.001,
+    "outputFormat":"single",
     "host":"127.0.0.1",
+    "enabled":false,
     "port":8000,
     "address":"/ch",
-    "outputFormat":"single",
-    "enabled":false
+    "sendInterval":0.001
   },
   "script":{
-    "path":"./test_script.lua"
-  },
-  "minimalMode":false
+    "path":"./thorp.lua"
+  }
 }
