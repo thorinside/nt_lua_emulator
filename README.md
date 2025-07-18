@@ -12,6 +12,7 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 - **State Saving**: Automatic preservation of your setup between sessions
 - **OSC Integration**: Send and receive OSC messages for external control
 - **Real-time Clock**: Built-in clock generator with adjustable BPM
+- **MIDI Input Support**: Full MIDI integration with device selection and script routing
 
 ### Input/Output Management
 - **I/O Mapping**: Drag-and-drop interface for connecting script I/O to physical I/O
@@ -48,6 +49,12 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 2. Navigate to your script file (.lua)
 3. Select the script and click "Open" or press Enter
 
+### MIDI Setup
+1. Press **F3** to open the MIDI device selection dialog
+2. Choose from available MIDI input devices
+3. MIDI messages will be routed to scripts that support MIDI input
+4. Scripts can define MIDI channel filtering and message type support
+
 ### Basic Usage
 
 #### Input/Output Mapping
@@ -77,6 +84,7 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 ## Keyboard Shortcuts
 
 - **F2**: Open script selection dialog
+- **F3**: Open MIDI input device selection dialog
 - **Alt+F4** / **Cmd+Q**: Quit the application
 - **Arrow keys**: Navigate in file selection dialog
 - **Enter**: Confirm selection in dialogs
@@ -94,7 +102,71 @@ The emulator supports OSC (Open Sound Control) for external communication:
    - Host: 127.0.0.1
    - Port: 8000
    - Address: /ch
-3. Output values are sent as individual floating-point messages using the output channel numbers (/ch/1, /ch/2... bys for default)
+3. Output values are sent as individual floating-point messages using the output channel numbers (/ch/1, /ch/2... by default)
+
+## MIDI Integration
+
+The emulator includes comprehensive MIDI input support:
+
+### Features
+- **Device Selection**: Choose from available system MIDI input devices via F3
+- **Graceful Degradation**: MIDI features are optional and the emulator works without MIDI support
+- **Channel Filtering**: Scripts can specify which MIDI channels to listen to
+- **Message Type Support**: Scripts define which MIDI message types they want to receive (note, CC, etc.)
+- **Automatic Routing**: MIDI messages are automatically routed to scripts that support them
+
+### MIDI Library
+- The emulator includes a compiled `luamidi.so` library for macOS (arm64)
+- The library is statically linked with rtmidi for maximum compatibility
+- MIDI support automatically detects if the library is available
+
+#### Library Source and Installation
+The MIDI library is built from the [lovemidi](https://github.com/thorinside/lovemidi) project:
+
+1. **For macOS (arm64)**: The pre-compiled `luamidi.so` is included in the emulator directory
+2. **For other platforms**: You'll need to compile the library yourself:
+   ```bash
+   git clone https://github.com/thorinside/lovemidi
+   cd lovemidi
+   # Build rtmidi dependency
+   cd rtmidi && mkdir build && cd build
+   cmake .. -DRTMIDI_API_JACK=OFF -DRTMIDI_API_CORE=ON -DBUILD_SHARED_LIBS=OFF
+   make
+   cd ../..
+   # Build luamidi (adjust paths for your system)
+   make -f Makefile.simple
+   # Copy the resulting luamidi.so to your emulator directory
+   cp luamidi.so /path/to/nt_lua_emulator/
+   ```
+3. **Library placement**: The `luamidi.so` file should be in the same directory as `main.lua`
+4. **Dependencies**: The library requires LuaJIT headers for compilation (install via your package manager)
+
+### Script Integration
+Scripts can include MIDI support by:
+
+1. Adding a `midiMessage` callback function:
+   ```lua
+   midiMessage = function(self, msg)
+       local status, note, velocity = msg[1], msg[2], msg[3]
+       -- Handle MIDI messages here
+   end
+   ```
+
+2. Defining MIDI configuration in the init return:
+   ```lua
+   return {
+       -- other fields...
+       midi = {
+           channelParameter = parameterIndex, -- Parameter controlling MIDI channel
+           messages = {"note"}                -- Supported message types
+       }
+   }
+   ```
+
+3. MIDI messages are passed as tables with three values: `{status, data1, data2}`
+   - Status byte includes both message type and channel
+   - For note messages: `{0x90, note_number, velocity}` (note on)
+   - Channel filtering is handled automatically based on the script's channel parameter
 
 ## Developing Scripts
 
@@ -106,6 +178,8 @@ When writing scripts for the Disting NT:
    - `outputs`: Table defining output types (kCV, kGate)
    - `init`: Initialization function (optional)
    - `gate`: Gate input handler (optional)
+   - `trigger`: Trigger input handler (optional)
+   - `midiMessage`: MIDI message handler (optional)
 
 2. Available callback functions:
    - `button`: Handle button presses
@@ -114,6 +188,7 @@ When writing scripts for the Disting NT:
    - `pot1Release`, `pot2Release`, `pot3Release`: Handle potentiometer releases
    - `encoder1Turn`, `encoder2Turn`: Handle encoder turns
    - `encoder1Push`, `encoder2Push`: Handle encoder pushes
+   - `midiMessage`: Handle MIDI input messages
    - `serialise`: Save script state
 
 3. Drawing functions for the display:
@@ -128,6 +203,7 @@ When writing scripts for the Disting NT:
 Settings are stored in `config.json` and include:
 
 - OSC settings (host, port, enabled status)
+- MIDI settings (enabled status, selected input device)
 - Window position and size
 - UI mode (minimal or full)
 - Active overlay (controls or I/O)
@@ -136,6 +212,7 @@ Settings are stored in `config.json` and include:
 
 - **Script Errors**: Error messages are displayed on screen and in the console
 - **OSC Connectivity**: Check your firewall settings if OSC isn't working
+- **MIDI Issues**: If MIDI support is not available, the emulator will continue to work without MIDI features
 - **Performance Issues**: Reduce the update rate in complex scripts
 
 ---
