@@ -414,6 +414,8 @@ function M.loadScript(scriptPath, createDefaultMappings)
                         initResult.inputNames or newScript.inputNames
                     newScript.outputNames =
                         initResult.outputNames or newScript.outputNames
+                    -- Copy MIDI configuration if present
+                    newScript.midi = initResult.midi or newScript.midi
                     if initResult.parameters then
                         -- Parse parameters AFTER script object exists
                         newScriptParameters =

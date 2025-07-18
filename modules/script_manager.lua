@@ -274,4 +274,9 @@ function M.getScriptMidiConfig()
     return nil
 end
 
+-- Get the current script object
+function M.getScript()
+    return script
+end
+
 return M

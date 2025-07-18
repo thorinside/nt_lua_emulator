@@ -4,7 +4,7 @@ local M = {} -- Module table
 
 -- Local state variables
 local currentInputs = {}
-local currentOutputs = {}
+local currentOutputs = {} -- Will be replaced with shared reference
 local inputClock = {}
 local inputPolarity = {}
 local inputScaling = {}
@@ -24,6 +24,11 @@ function M.init(deps)
     -- Store dependencies
     M.safeScriptCall = deps.safeScriptCall
     M.scriptManager = deps.scriptManager
+    
+    -- Use shared currentOutputs from emulator
+    if deps.currentOutputs then
+        currentOutputs = deps.currentOutputs
+    end
 
     -- Initialize input arrays with default values
     for i = 1, 12 do
@@ -36,8 +41,10 @@ function M.init(deps)
         currentInputs[i] = 0
     end
 
-    -- Initialize output array
-    for i = 1, 8 do currentOutputs[i] = 0 end
+    -- Initialize output array if not using shared reference
+    if not deps.currentOutputs then
+        for i = 1, 8 do currentOutputs[i] = 0 end
+    end
 
     return M
 end

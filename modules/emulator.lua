@@ -479,7 +479,8 @@ function M.load()
     -- Initialize signal processor
     signalProcessor.init({
         safeScriptCall = safeScriptCall,
-        scriptManager = scriptManager
+        scriptManager = scriptManager,
+        currentOutputs = currentOutputs
     })
 
     -- Initialize parameter manager
@@ -1004,23 +1005,17 @@ function M.update(dt)
     outputValues = scriptManager.callScriptStep(dt, scriptInputValues) -- Changed first argument to dt
 
     -- Update outputs with values from script
-    -- First, reset all physical outputs to 0
-    for i = 1, 8 do
-        currentOutputs[i] = 0
-    end
-    
-    -- Check if outputValues is a valid table - if it's nil or not a table,
+    -- Only update outputs if the step function returned values
     if type(outputValues) == "table" then
-        -- Update outputs with values from script using proper mappings
+        -- First, reset only the outputs that will be updated
         for i = 1, scriptOutputCount do
-            if outputValues[i] then
-                local physicalOutput = scriptOutputAssignments[i]
-                if physicalOutput then
-                    currentOutputs[physicalOutput] = outputValues[i]
-                end
+            local physicalOutput = scriptOutputAssignments[i]
+            if physicalOutput and outputValues[i] ~= nil then
+                currentOutputs[physicalOutput] = outputValues[i]
             end
         end
     end
+    -- If step returns nil, outputs are preserved from gate/trigger functions
 
     -- Send outputs via OSC
     osc_client.sendOutputs(currentOutputs)
@@ -1028,30 +1023,37 @@ function M.update(dt)
     -- Poll MIDI messages if MIDI is enabled
     if midiHandler.isAvailable() and midiHandler.getCurrentPortIndex() >= 0 then
         local msg = midiHandler.pollMessages()
-        if msg and script and script.midiMessage then
-            -- Check MIDI configuration
-            local midiConfig = scriptManager.getScriptMidiConfig()
-            if midiConfig then
-                -- Check channel filtering
-                local msgChannel = midiHandler.getChannelFromStatus(msg[1])
-                local scriptChannel = getScriptMidiChannel()
-                
-                -- Only pass message if channel matches or omni mode (channel 0)
-                if scriptChannel == 0 or msgChannel == scriptChannel then
-                    -- Check if this is a supported message type
-                    local isSupported = false
-                    if midiConfig.messages then
-                        for _, msgType in ipairs(midiConfig.messages) do
-                            if msgType == "note" and midiHandler.isNoteMessage(msg[1]) then
-                                isSupported = true
-                                break
-                            end
-                            -- Can add more message types here (cc, pitchbend, etc)
-                        end
-                    end
+        -- Debug removed - MIDI is working
+        if msg then
+            local currentScript = scriptManager.getScript()
+            if currentScript and currentScript.midiMessage then
+                -- Check MIDI configuration
+                local midiConfig = scriptManager.getScriptMidiConfig()
+                -- MIDI config exists
+                if midiConfig then
+                    -- Check channel filtering
+                    local msgChannel = midiHandler.getChannelFromStatus(msg[1])
+                    local scriptChannel = getScriptMidiChannel()
                     
-                    if isSupported then
-                        scriptManager.callScriptMidiMessage(msg)
+                    -- Channel routing working correctly
+                    
+                    -- Only pass message if channel matches or omni mode (channel 0)
+                    if scriptChannel == 0 or msgChannel == scriptChannel then
+                        -- Check if this is a supported message type
+                        local isSupported = false
+                        if midiConfig.messages then
+                            for _, msgType in ipairs(midiConfig.messages) do
+                                if msgType == "note" and midiHandler.isNoteMessage(msg[1]) then
+                                    isSupported = true
+                                    break
+                                end
+                                -- Can add more message types here (cc, pitchbend, etc)
+                            end
+                        end
+                        
+                        if isSupported then
+                            scriptManager.callScriptMidiMessage(msg)
+                        end
                     end
                 end
             end
