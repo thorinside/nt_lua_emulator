@@ -256,4 +256,22 @@ function M.callScriptTrigger(params)
     return M.safeScriptCall(script.trigger, script, params.input)
 end
 
+-- Call the script's midiMessage function
+function M.callScriptMidiMessage(msg)
+    if not script or not script.midiMessage then return nil end
+    return M.safeScriptCall(script.midiMessage, script, msg)
+end
+
+-- Get script MIDI configuration
+function M.getScriptMidiConfig()
+    if not script then return nil end
+    
+    -- Check if script has MIDI support in its init return
+    if script.midi then
+        return script.midi
+    end
+    
+    return nil
+end
+
 return M

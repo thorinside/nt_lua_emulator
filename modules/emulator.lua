@@ -11,6 +11,7 @@ local parameterManager = require("modules.parameter_manager")
 local signalProcessor = require("modules.signal_processor")
 local uiState = require("modules.ui_state")
 local scriptManager = require("modules.script_manager")
+local midiHandler = require("modules.midi_handler")
 
 -- Initialize the script loader with notification functions
 scriptLoader.init({
@@ -413,12 +414,40 @@ local function loadScript(scriptPathToLoad)
     return scriptObj, scriptParams
 end
 
+-- Load MIDI configuration from config file
+local function loadMidiConfig()
+    local cfg = config.load()
+    if cfg.midi then
+        if cfg.midi.enabled and cfg.midi.selectedInput >= 0 then
+            midiHandler.openInputPort(cfg.midi.selectedInput)
+        end
+    end
+end
+
+-- Get script MIDI channel from parameter
+local function getScriptMidiChannel()
+    local midiConfig = scriptManager.getScriptMidiConfig()
+    if not midiConfig then return nil end
+    
+    if midiConfig.channelParameter then
+        local params = parameterManager.getParameters()
+        if params and params[midiConfig.channelParameter] then
+            return params[midiConfig.channelParameter].current
+        end
+    end
+    
+    return 0 -- Default to omni mode
+end
+
 --------------------------------------------------------------------------------
 -- The Emulator Module Functions
 --------------------------------------------------------------------------------
 function M.load()
     -- Initialize the OSC client first
     osc_client.init()
+    
+    -- Initialize MIDI handler
+    midiHandler.init()
 
     -- Initialize UI components
     fontDefault = love.graphics.newFont(14) -- Default font at original size
@@ -560,6 +589,9 @@ function M.load()
 
     -- Force a recalculation of the layout
     windowManager.invalidateCache()
+    
+    -- Load MIDI configuration if available
+    loadMidiConfig()
 
     return M
 end
@@ -992,6 +1024,39 @@ function M.update(dt)
 
     -- Send outputs via OSC
     osc_client.sendOutputs(currentOutputs)
+    
+    -- Poll MIDI messages if MIDI is enabled
+    if midiHandler.isAvailable() and midiHandler.getCurrentPortIndex() >= 0 then
+        local msg = midiHandler.pollMessages()
+        if msg and script and script.midiMessage then
+            -- Check MIDI configuration
+            local midiConfig = scriptManager.getScriptMidiConfig()
+            if midiConfig then
+                -- Check channel filtering
+                local msgChannel = midiHandler.getChannelFromStatus(msg[1])
+                local scriptChannel = getScriptMidiChannel()
+                
+                -- Only pass message if channel matches or omni mode (channel 0)
+                if scriptChannel == 0 or msgChannel == scriptChannel then
+                    -- Check if this is a supported message type
+                    local isSupported = false
+                    if midiConfig.messages then
+                        for _, msgType in ipairs(midiConfig.messages) do
+                            if msgType == "note" and midiHandler.isNoteMessage(msg[1]) then
+                                isSupported = true
+                                break
+                            end
+                            -- Can add more message types here (cc, pitchbend, etc)
+                        end
+                    end
+                    
+                    if isSupported then
+                        scriptManager.callScriptMidiMessage(msg)
+                    end
+                end
+            end
+        end
+    end
 end
 
 function M.keypressed(key)
@@ -1484,6 +1549,20 @@ function M.draw()
         -- Draw notifications
         notifications.draw(fontDefault, fontSmall)
     end
+end
+
+-- Save MIDI settings to config
+function M.saveMidiSettings()
+    local cfg = config.load()
+    cfg.midi = cfg.midi or {}
+    cfg.midi.enabled = midiHandler.isAvailable()
+    cfg.midi.selectedInput = midiHandler.getCurrentPortIndex()
+    config.save(cfg)
+end
+
+-- Get MIDI handler for external access
+function M.getMidiHandler()
+    return midiHandler
 end
 
 return M

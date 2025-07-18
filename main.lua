@@ -1,24 +1,32 @@
 -- main.lua
 local emulator = require("modules.emulator")
 local PathInputDialog = require("modules.path_input_dialog")
+local MidiInputDialog = require("modules.midi_input_dialog")
 local debug_utils = require("modules.debug_utils")
 
 function love.load()
     -- Initialize everything
     PathInputDialog.init()
     emulator.load()
+    
+    -- Initialize MIDI input dialog after emulator is loaded
+    MidiInputDialog.init({
+        midiHandler = emulator.getMidiHandler()
+    })
 
     -- Enable memory profiling with F11 key
 end
 
 function love.update(dt)
     PathInputDialog.update(dt)
+    MidiInputDialog.update(dt)
     emulator.update(dt)
 end
 
 function love.draw()
     emulator.draw()
     PathInputDialog.draw()
+    MidiInputDialog.draw()
 end
 
 function love.mousepressed(x, y, button)
@@ -26,6 +34,13 @@ function love.mousepressed(x, y, button)
     if PathInputDialog.isOpen() then
         -- No mouse handling for path input right now
         return
+    end
+    
+    -- Handle mousepressed in MIDI input dialog if it's open
+    if MidiInputDialog.isActive() then
+        if MidiInputDialog.mousepressed(x, y, button) then
+            return
+        end
     end
 
     emulator.mousepressed(x, y, button)
@@ -38,6 +53,11 @@ function love.wheelmoved(x, y)
     if PathInputDialog.isOpen() then
         if PathInputDialog.wheelmoved(x, y) then return end
     end
+    
+    -- Handle wheelmoved in MIDI input dialog if it's open
+    if MidiInputDialog.isActive() then
+        if MidiInputDialog.wheelmoved(x, y) then return end
+    end
 
     emulator.wheelmoved(x, y)
 end
@@ -48,16 +68,31 @@ function love.keypressed(key, scancode, isrepeat)
         (key == "q" and love.keyboard.isDown("lgui")) then love.event.quit() end
 
     -- Check for F2 key to open path input dialog
-    if key == "f2" and not PathInputDialog.isOpen() then
+    if key == "f2" and not PathInputDialog.isOpen() and not MidiInputDialog.isActive() then
         PathInputDialog.open(function(filePath)
             emulator.loadScriptFromPath(filePath)
         end)
+        return
+    end
+    
+    -- Check for F3 key to open MIDI input dialog
+    if key == "f3" and not MidiInputDialog.isActive() and not PathInputDialog.isOpen() then
+        MidiInputDialog.show()
+        emulator.saveMidiSettings()  -- Save when dialog is opened (port selection happens in dialog)
         return
     end
 
     -- Handle keypressed in path input dialog first if it's open
     if PathInputDialog.isOpen() then
         if PathInputDialog.keypressed(key, scancode, isrepeat) then
+            return
+        end
+    end
+    
+    -- Handle keypressed in MIDI input dialog if it's active
+    if MidiInputDialog.isActive() then
+        if MidiInputDialog.keypressed(key) then
+            emulator.saveMidiSettings()  -- Save when selection is made
             return
         end
     end

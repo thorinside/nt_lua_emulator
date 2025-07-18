@@ -13,7 +13,11 @@ local defaultConfig = {
         outputFormat = "single" -- "array" or "single"
     },
     script = {path = "test_script.lua"},
-    minimalMode = false -- Add minimal mode setting
+    minimalMode = false, -- Add minimal mode setting
+    midi = {
+        enabled = false,
+        selectedInput = -1 -- -1 means no input selected
+    }
 }
 
 -- Load configuration from file
