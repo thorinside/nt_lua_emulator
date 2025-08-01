@@ -7,6 +7,8 @@ local midi = nil
 local midiAvailable = false
 local currentInputPort = nil
 local inputPortIndex = -1
+local currentOutputPort = nil
+local outputPortIndex = -1
 
 -- Try to load MIDI library
 function M.init()
@@ -118,20 +120,6 @@ function M.pollMessages()
     return nil
 end
 
--- Close current MIDI input
-function M.close()
-    if not midiAvailable or not midi then
-        return
-    end
-    
-    if currentInputPort and midi.closein then
-        midi.closein(currentInputPort)
-        print("Closed MIDI input port " .. currentInputPort)
-    end
-    
-    currentInputPort = nil
-    inputPortIndex = -1
-end
 
 -- Get current input port index
 function M.getCurrentPortIndex()
@@ -152,6 +140,126 @@ function M.isNoteMessage(status)
     local messageType = math.floor(status / 16)
     -- 0x80 = note off, 0x90 = note on
     return messageType == 8 or messageType == 9
+end
+
+-- Get list of available MIDI output ports
+function M.getOutputPorts()
+    if not midiAvailable or not midi then
+        return {}
+    end
+    
+    local ports = {}
+    local count = midi.getoutportcount()
+    
+    for i = 0, count - 1 do
+        local name = midi.getOutPortName(i)
+        if name then
+            table.insert(ports, {
+                index = i,
+                name = name
+            })
+        else
+            -- Fallback if getOutPortName doesn't exist
+            table.insert(ports, {
+                index = i,
+                name = "MIDI Output " .. (i + 1)
+            })
+        end
+    end
+    
+    return ports
+end
+
+-- Open a MIDI output port
+function M.openOutputPort(portIndex)
+    if not midiAvailable or not midi then
+        return false
+    end
+    
+    -- Close current port if open
+    M.closeOutputPort()
+    
+    -- Validate port index
+    local portCount = midi.getoutportcount()
+    if portIndex < 0 or portIndex >= portCount then
+        print("Invalid MIDI output port index: " .. portIndex)
+        return false
+    end
+    
+    -- Open the port
+    local success = true
+    if midi.openout then
+        success = midi.openout(portIndex)
+    end
+    
+    if success then
+        currentOutputPort = portIndex
+        outputPortIndex = portIndex
+        print("Opened MIDI output port " .. portIndex)
+        return true
+    else
+        print("Failed to open MIDI output port " .. portIndex)
+        return false
+    end
+end
+
+-- Send MIDI message to current output port
+function M.sendMessage(byte1, byte2, byte3)
+    if not midiAvailable or not midi or outputPortIndex < 0 then
+        return false
+    end
+    
+    -- Send the message with error handling
+    local success, err = pcall(midi.sendMessage, outputPortIndex, byte1, byte2 or 0, byte3 or 0)
+    if not success then
+        print("MIDI output error:", err)
+        return false
+    end
+    return true
+end
+
+-- Get current output port index
+function M.getCurrentOutputPortIndex()
+    return outputPortIndex
+end
+
+-- Close current MIDI output
+function M.closeOutputPort()
+    if not midiAvailable or not midi then
+        return
+    end
+    
+    if currentOutputPort and midi.closeout then
+        midi.closeout(currentOutputPort)
+        print("Closed MIDI output port " .. currentOutputPort)
+    end
+    
+    currentOutputPort = nil
+    outputPortIndex = -1
+end
+
+-- Update the close function to close both input and output
+function M.close()
+    if not midiAvailable or not midi then
+        return
+    end
+    
+    -- Close input port
+    if currentInputPort and midi.closein then
+        midi.closein(currentInputPort)
+        print("Closed MIDI input port " .. currentInputPort)
+    end
+    
+    -- Close output port
+    if currentOutputPort and midi.closeout then
+        midi.closeout(currentOutputPort)
+        print("Closed MIDI output port " .. currentOutputPort)
+    end
+    
+    currentInputPort = nil
+    inputPortIndex = -1
+    currentOutputPort = nil
+    outputPortIndex = -1
 end
 
 return M

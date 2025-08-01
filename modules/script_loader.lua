@@ -18,6 +18,7 @@ local absolutePathCheckInterval = 2.0 -- Check every 2 seconds
 -- Function to show notifications (will be injected from emulator.lua)
 local showNotification = nil
 local showErrorNotification = nil
+local midiHandler = nil
 
 -- Function to safely call script functions with pcall
 local function safeScriptCall(func, scriptObj, ...)
@@ -291,6 +292,61 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 -- Standard behavior for the third potentiometer
                 -- In the real device, this might control the currently focused parameter
                 print("Pot 3 turned: " .. value)
+            end
+
+            -- Send MIDI message from script (hardware API emulation)
+            _G.sendMIDI = function(where, ...)
+                -- Get variable arguments (1-3 MIDI bytes)
+                local byteCount = select('#', ...)
+                if byteCount < 1 or byteCount > 3 then
+                    debug_utils.debugLog("sendMIDI: Expected 1-3 MIDI bytes, got " .. byteCount)
+                    return false
+                end
+                
+                -- Extract bytes
+                local byte1 = select(1, ...)
+                local byte2 = byteCount >= 2 and select(2, ...) or nil
+                local byte3 = byteCount >= 3 and select(3, ...) or nil
+                
+                -- Validate MIDI bytes
+                local function validateByte(value, name, isStatus)
+                    if type(value) ~= "number" or value ~= math.floor(value) then
+                        debug_utils.debugLog("sendMIDI: " .. name .. " must be integer, got " .. tostring(value))
+                        return false
+                    end
+                    if isStatus then
+                        if value < 0x80 or value > 0xFF then
+                            debug_utils.debugLog("sendMIDI: " .. name .. " (status) must be 128-255, got " .. value)
+                            return false
+                        end
+                    else
+                        if value < 0x00 or value > 0x7F then
+                            debug_utils.debugLog("sendMIDI: " .. name .. " (data) must be 0-127, got " .. value)
+                            return false
+                        end
+                    end
+                    return true
+                end
+                
+                -- Validate all bytes
+                if not validateByte(byte1, "byte1", true) then return false end
+                if byte2 and not validateByte(byte2, "byte2", false) then return false end
+                if byte3 and not validateByte(byte3, "byte3", false) then return false end
+                
+                -- Check MIDI availability
+                if not midiHandler or not midiHandler.isAvailable() then
+                    debug_utils.debugLog("sendMIDI: MIDI not available")
+                    return false
+                end
+                
+                -- Log for debugging
+                local logMsg = "sendMIDI: " .. byte1
+                if byte2 then logMsg = logMsg .. " " .. byte2 end
+                if byte3 then logMsg = logMsg .. " " .. byte3 end
+                debug_utils.debugLog(logMsg)
+                
+                -- Send via MIDI handler (ignore 'where' parameter for emulation)
+                return midiHandler.sendMessage(byte1, byte2, byte3)
             end
 
             local loadedScript -- Temporary variable to hold the script table
@@ -675,6 +731,7 @@ end
 function M.init(notifyFunctions)
     showNotification = notifyFunctions.showNotification
     showErrorNotification = notifyFunctions.showErrorNotification
+    midiHandler = notifyFunctions.midiHandler
 
     -- Get initial modification time of the script if path provided
     if notifyFunctions.scriptPath then

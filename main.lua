@@ -2,6 +2,7 @@
 local emulator = require("modules.emulator")
 local PathInputDialog = require("modules.path_input_dialog")
 local MidiInputDialog = require("modules.midi_input_dialog")
+local MidiOutputDialog = require("modules.midi_output_dialog")
 local debug_utils = require("modules.debug_utils")
 
 function love.load()
@@ -13,6 +14,11 @@ function love.load()
     MidiInputDialog.init({
         midiHandler = emulator.getMidiHandler()
     })
+    
+    -- Initialize MIDI output dialog
+    MidiOutputDialog.init({
+        midiHandler = emulator.getMidiHandler()
+    })
 
     -- Enable memory profiling with F11 key
 end
@@ -20,6 +26,7 @@ end
 function love.update(dt)
     PathInputDialog.update(dt)
     MidiInputDialog.update(dt)
+    MidiOutputDialog.update(dt)
     emulator.update(dt)
 end
 
@@ -27,6 +34,7 @@ function love.draw()
     emulator.draw()
     PathInputDialog.draw()
     MidiInputDialog.draw()
+    MidiOutputDialog.draw()
 end
 
 function love.mousepressed(x, y, button)
@@ -39,6 +47,13 @@ function love.mousepressed(x, y, button)
     -- Handle mousepressed in MIDI input dialog if it's open
     if MidiInputDialog.isActive() then
         if MidiInputDialog.mousepressed(x, y, button) then
+            return
+        end
+    end
+    
+    -- Handle mousepressed in MIDI output dialog if it's open
+    if MidiOutputDialog.isActive() then
+        if MidiOutputDialog.mousepressed(x, y, button) then
             return
         end
     end
@@ -57,6 +72,11 @@ function love.wheelmoved(x, y)
     -- Handle wheelmoved in MIDI input dialog if it's open
     if MidiInputDialog.isActive() then
         if MidiInputDialog.wheelmoved(x, y) then return end
+    end
+    
+    -- Handle wheelmoved in MIDI output dialog if it's open
+    if MidiOutputDialog.isActive() then
+        if MidiOutputDialog.wheelmoved(x, y) then return end
     end
 
     emulator.wheelmoved(x, y)
@@ -81,6 +101,13 @@ function love.keypressed(key, scancode, isrepeat)
         emulator.saveMidiSettings()  -- Save when dialog is opened (port selection happens in dialog)
         return
     end
+    
+    -- Check for F4 key to open MIDI output dialog (only if not Alt+F4 for quit)
+    if key == "f4" and not love.keyboard.isDown("lalt") and not MidiOutputDialog.isActive() and not PathInputDialog.isOpen() and not MidiInputDialog.isActive() then
+        MidiOutputDialog.show()
+        emulator.saveMidiSettings()  -- Save when dialog is opened
+        return
+    end
 
     -- Handle keypressed in path input dialog first if it's open
     if PathInputDialog.isOpen() then
@@ -92,6 +119,14 @@ function love.keypressed(key, scancode, isrepeat)
     -- Handle keypressed in MIDI input dialog if it's active
     if MidiInputDialog.isActive() then
         if MidiInputDialog.keypressed(key) then
+            emulator.saveMidiSettings()  -- Save when selection is made
+            return
+        end
+    end
+    
+    -- Handle keypressed in MIDI output dialog if it's active
+    if MidiOutputDialog.isActive() then
+        if MidiOutputDialog.keypressed(key) then
             emulator.saveMidiSettings()  -- Save when selection is made
             return
         end

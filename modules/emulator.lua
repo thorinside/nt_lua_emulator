@@ -20,7 +20,8 @@ scriptLoader.init({
     end,
     showErrorNotification = function(message)
         notifications.showErrorNotification(message)
-    end
+    end,
+    midiHandler = midiHandler
 })
 
 -- Required modules
@@ -398,7 +399,8 @@ local function loadScript(scriptPathToLoad)
     scriptLoader.init({
         showNotification = showNotification,
         showErrorNotification = showErrorNotification,
-        scriptPath = scriptPathToLoad
+        scriptPath = scriptPathToLoad,
+        midiHandler = midiHandler
     })
 
     local scriptObj, scriptParams = scriptLoader.loadScript(scriptPathToLoad,
@@ -418,8 +420,11 @@ end
 local function loadMidiConfig()
     local cfg = config.load()
     if cfg.midi then
-        if cfg.midi.enabled and cfg.midi.selectedInput >= 0 then
+        if cfg.midi.enabled and cfg.midi.selectedInput and cfg.midi.selectedInput >= 0 then
             midiHandler.openInputPort(cfg.midi.selectedInput)
+        end
+        if cfg.midi.enabled and cfg.midi.selectedOutput and cfg.midi.selectedOutput >= 0 then
+            midiHandler.openOutputPort(cfg.midi.selectedOutput)
         end
     end
 end
@@ -1559,6 +1564,7 @@ function M.saveMidiSettings()
     cfg.midi = cfg.midi or {}
     cfg.midi.enabled = midiHandler.isAvailable()
     cfg.midi.selectedInput = midiHandler.getCurrentPortIndex()
+    cfg.midi.selectedOutput = midiHandler.getCurrentOutputPortIndex()
     config.save(cfg)
 end
 
