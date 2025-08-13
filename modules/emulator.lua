@@ -37,6 +37,9 @@ local config = require("modules.config")
 local MinimalMode = require("modules.minimal_mode") -- Add minimal mode module
 local json = require("lib.dkjson") -- Add JSON library
 local debug_utils = require("modules.debug_utils")
+local PathInputDialog = require("modules.path_input_dialog")
+local MidiInputDialog = require("modules.midi_input_dialog")
+local MidiOutputDialog = require("modules.midi_output_dialog")
 
 local origUpdateTime, origUpdateTriggers, origRender, origUpdateParams
 
@@ -142,6 +145,24 @@ local disableFunctionProfiling = nil
 -- Use a default script path that will be overridden by state.json if available
 local scriptPath = "test_script.lua" -- Default path
 
+-- Hardware key mappings for keyboard shortcuts
+local HARDWARE_KEY_MAPPINGS = {
+    -- Buttons (left to right, top to bottom in UI)
+    q = { type = "button", index = 1, description = "Button 1" },
+    a = { type = "button", index = 2, description = "Button 2" },
+    f = { type = "button", index = 3, description = "Button 3" },
+    t = { type = "button", index = 4, description = "Button 4" },
+    
+    -- Pot presses (left to right)
+    w = { type = "pot", index = 1, description = "Pot 1 Press" },
+    e = { type = "pot", index = 2, description = "Pot 2 Press" },
+    r = { type = "pot", index = 3, description = "Pot 3 Press" },
+    
+    -- Encoder presses (left to right)
+    s = { type = "encoder", index = 1, description = "Encoder 1 Press" },
+    d = { type = "encoder", index = 2, description = "Encoder 2 Press" }
+}
+
 --------------------------------------------------------------------------------
 -- Runtime State
 --------------------------------------------------------------------------------
@@ -174,6 +195,43 @@ local function showNotification(message) notifications.showNotification(message)
 -- Function to show error notifications (delegate to notifications module)
 local function showErrorNotification(message)
     notifications.showErrorNotification(message)
+end
+
+-- Hardware control simulation functions
+local function simulateHardwarePress(controlType, controlIndex)
+    if not script then return end
+    
+    if controlType == "button" then
+        -- Use simulation API for visual feedback
+        controls.simulateButtonPress(controlIndex)
+    elseif controlType == "pot" then
+        -- Use simulation API for visual feedback
+        controls.simulatePotPress(controlIndex)
+    elseif controlType == "encoder" then
+        -- Use simulation API for visual feedback
+        controls.simulateEncoderPress(controlIndex)
+    end
+    
+    -- Debug logging
+    debug_utils.debugLog("Hardware key press: " .. controlType .. " " .. controlIndex)
+end
+
+local function simulateHardwareRelease(controlType, controlIndex)
+    if not script then return end
+    
+    if controlType == "button" then
+        -- Use simulation API for visual feedback
+        controls.simulateButtonRelease(controlIndex)
+    elseif controlType == "pot" then
+        -- Use simulation API for visual feedback
+        controls.simulatePotRelease(controlIndex)
+    elseif controlType == "encoder" then
+        -- Use simulation API for visual feedback
+        controls.simulateEncoderRelease(controlIndex)
+    end
+    
+    -- Debug logging
+    debug_utils.debugLog("Hardware key release: " .. controlType .. " " .. controlIndex)
 end
 
 -- Function to safely call script functions with pcall (delegate to scriptLoader)
@@ -1084,6 +1142,19 @@ function M.keypressed(key)
         return
     end
 
+    -- Hardware control key bindings (check before minimal mode to respect priority)
+    -- Skip hardware keys if dialogs are active
+    if not (PathInputDialog.isOpen() or 
+           MidiInputDialog.isActive() or 
+           MidiOutputDialog.isActive()) then
+        local hardwareKey = HARDWARE_KEY_MAPPINGS[key]
+        if hardwareKey then
+            -- Simulate hardware control press
+            simulateHardwarePress(hardwareKey.type, hardwareKey.index)
+            return -- Consume event
+        end
+    end
+
     -- Handle key in minimal mode if active
     if windowManager.isMinimalMode() then
         if MinimalMode.keypressed(key) then
@@ -1181,6 +1252,19 @@ function M.keypressed(key)
 end
 
 function M.keyreleased(key)
+    -- Hardware control key bindings (check before minimal mode to respect priority)
+    -- Skip hardware keys if dialogs are active
+    if not (PathInputDialog.isOpen() or 
+           MidiInputDialog.isActive() or 
+           MidiOutputDialog.isActive()) then
+        local hardwareKey = HARDWARE_KEY_MAPPINGS[key]
+        if hardwareKey then
+            -- Simulate hardware control release
+            simulateHardwareRelease(hardwareKey.type, hardwareKey.index)
+            return -- Consume event
+        end
+    end
+
     -- Let minimal mode handle if active
     if windowManager.isMinimalMode() then MinimalMode.keyreleased(key) end
 end

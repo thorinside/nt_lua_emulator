@@ -414,4 +414,69 @@ function controls.getPotValues()
     return potValues
 end
 
+-- Simulation API for keyboard-triggered controls with visual feedback
+function controls.simulateButtonPress(buttonIndex)
+    if not isActive then return end
+    local controlIndex = buttonIndex + 5 -- Buttons are at indices 6-9
+    if controls[controlIndex] and controls[controlIndex].type == kButton then
+        controls[controlIndex].pushed = true
+        if controls.onButtonPress then
+            controls.onButtonPress(buttonIndex)
+        end
+    end
+end
+
+function controls.simulateButtonRelease(buttonIndex)
+    if not isActive then return end
+    local controlIndex = buttonIndex + 5 -- Buttons are at indices 6-9
+    if controls[controlIndex] and controls[controlIndex].type == kButton then
+        controls[controlIndex].pushed = false
+        if controls.onButtonRelease then
+            controls.onButtonRelease(buttonIndex)
+        end
+    end
+end
+
+function controls.simulatePotPress(potIndex)
+    if not isActive then return end
+    if controls[potIndex] and controls[potIndex].type == kPot then
+        controls[potIndex].pushed = true
+        if controls.onPotPress then
+            controls.onPotPress(potIndex)
+        end
+    end
+end
+
+function controls.simulatePotRelease(potIndex)
+    if not isActive then return end
+    if controls[potIndex] and controls[potIndex].type == kPot then
+        controls[potIndex].pushed = false
+        if controls.onPotRelease then
+            controls.onPotRelease(potIndex)
+        end
+    end
+end
+
+function controls.simulateEncoderPress(encoderIndex)
+    if not isActive then return end
+    local controlIndex = encoderIndex + 3 -- Encoders are at indices 4-5
+    if controls[controlIndex] and controls[controlIndex].type == kEncoder then
+        controls[controlIndex].pushed = true
+        if controls.onEncoderPress then
+            controls.onEncoderPress(encoderIndex)
+        end
+    end
+end
+
+function controls.simulateEncoderRelease(encoderIndex)
+    if not isActive then return end
+    local controlIndex = encoderIndex + 3 -- Encoders are at indices 4-5
+    if controls[controlIndex] and controls[controlIndex].type == kEncoder then
+        controls[controlIndex].pushed = false
+        if controls.onEncoderRelease then
+            controls.onEncoderRelease(encoderIndex)
+        end
+    end
+end
+
 return controls
