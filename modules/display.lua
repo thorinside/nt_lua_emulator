@@ -17,6 +17,17 @@ local config = {
     tinyFont = nil -- Will hold the tom-thumb font
 }
 
+-- Display mode state tracking
+local currentDisplayMode = "overview" -- Default display mode
+local validDisplayModes = {
+    ["overview"] = true,
+    ["meters"] = true,
+    ["parameters"] = true,
+    ["ui"] = true,
+    ["algorithm"] = true,
+    ["menu"] = true
+}
+
 -- Shared color calculation function with non-linear brightness adjustment
 local function calculateColor(colorValue)
     -- Ensure we have a valid color value
@@ -131,7 +142,7 @@ function display.drawLine(x1, y1, x2, y2, color)
 end
 
 -- Draw text
-function display.drawText(x, y, text, color)
+function display.drawText(x, y, text, color, alignment)
     love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
@@ -139,8 +150,21 @@ function display.drawText(x, y, text, color)
     -- Use our pixel font
     love.graphics.setFont(config.pixelFont)
 
+    -- Calculate position based on alignment
+    alignment = alignment or "left"
+    local adjustedX = x
+    
+    if alignment == "centre" or alignment == "center" then
+        local textWidth = config.pixelFont:getWidth(text)
+        adjustedX = x - textWidth / 2 / config.scaling
+    elseif alignment == "right" then
+        local textWidth = config.pixelFont:getWidth(text)
+        adjustedX = x - textWidth / config.scaling
+    -- "left" is default, no adjustment needed
+    end
+
     -- Draw the text
-    love.graphics.print(text, x * config.scaling,
+    love.graphics.print(text, adjustedX * config.scaling,
                         y * config.scaling - config.pixelFont:getHeight())
 
     love.graphics.pop()
@@ -211,7 +235,7 @@ end
 function display.getConfig() return config end
 
 -- Draw text with tiny font (using tom-thumb.bdf)
-function display.drawTinyText(x, y, text, color)
+function display.drawTinyText(x, y, text, color, alignment)
     love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
@@ -219,11 +243,48 @@ function display.drawTinyText(x, y, text, color)
     -- Use our tiny font
     love.graphics.setFont(config.tinyFont)
 
+    -- Calculate position based on alignment
+    alignment = alignment or "left"
+    local adjustedX = x
+    
+    if alignment == "centre" or alignment == "center" then
+        local textWidth = config.tinyFont:getWidth(text)
+        adjustedX = x - textWidth / 2 / config.scaling
+    elseif alignment == "right" then
+        local textWidth = config.tinyFont:getWidth(text)
+        adjustedX = x - textWidth / config.scaling
+    -- "left" is default, no adjustment needed
+    end
+
     -- Draw the text
-    love.graphics.print(text, x * config.scaling,
+    love.graphics.print(text, adjustedX * config.scaling,
                         y * config.scaling - config.tinyFont:getHeight())
 
     love.graphics.pop()
+end
+
+-- Set the display mode (used by script functions)
+function display.setDisplayMode(mode)
+    if type(mode) ~= "string" then
+        return false
+    end
+    
+    if validDisplayModes[mode] then
+        currentDisplayMode = mode
+        return true
+    else
+        return false
+    end
+end
+
+-- Get the current display mode
+function display.getDisplayMode()
+    return currentDisplayMode
+end
+
+-- Check if a display mode is valid
+function display.isValidDisplayMode(mode)
+    return type(mode) == "string" and validDisplayModes[mode] == true
 end
 
 -- Create an environment with drawing functions for script sandboxing

@@ -1,0 +1,3 @@
+# Spec Summary (Lite)
+
+Update the Disting NT LUA Emulator to support API version 1.10.0, adding new script context properties, algorithm/parameter query functions, display mode control, and enhanced drawing capabilities. This update maintains full backward compatibility with existing 1.9.0 scripts while enabling developers to utilize the expanded feature set including self.algorithmIndex, metadata query functions, setDisplayMode control, and text alignment options.

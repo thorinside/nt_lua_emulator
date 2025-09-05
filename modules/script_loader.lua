@@ -136,6 +136,107 @@ function M.loadScript(scriptPath, createDefaultMappings)
             -- Add compatibility functions for test scripts
             _G.getCurrentAlgorithm = function() return 0 end
             _G.getCurrentParameter = function() return 0 end
+            
+            -- Algorithm Query Functions (API 1.10.0)
+            -- Returns the total number of algorithms in the current preset
+            _G.getAlgorithmCount = function()
+                -- In the emulator, we simulate a single algorithm per preset
+                return 1
+            end
+            
+            -- Returns the display name for the algorithm at the specified index
+            _G.getAlgorithmName = function(index)
+                -- Validate index parameter
+                if type(index) ~= "number" then
+                    return nil
+                end
+                
+                -- Convert to integer if needed
+                index = math.floor(index)
+                
+                -- Check bounds - valid indices are 0 to (count - 1)
+                local count = _G.getAlgorithmCount()
+                if index < 0 or index >= count then
+                    return nil
+                end
+                
+                -- For the emulator, return a default algorithm name
+                -- In a real device, this would return the actual algorithm name
+                return "EmulatedScript"
+            end
+            
+            -- Parameter Query Functions (API 1.10.0)
+            -- Returns the number of parameters for the specified algorithm index
+            _G.getParameterCount = function(alg)
+                -- Validate algorithm parameter
+                if type(alg) ~= "number" then
+                    return nil
+                end
+                
+                -- Convert to integer if needed
+                alg = math.floor(alg)
+                
+                -- Check bounds - valid indices are 0 to (count - 1)
+                local algCount = _G.getAlgorithmCount()
+                if alg < 0 or alg >= algCount then
+                    return nil
+                end
+                
+                -- For the emulator, return the actual parameter count
+                -- In a real device, this would return the parameter count for the specified algorithm
+                return newScriptParameters and #newScriptParameters or 0
+            end
+            
+            -- Returns the parameter name for the specified algorithm and parameter indices
+            _G.getParameterName = function(alg, index)
+                -- Validate algorithm parameter
+                if type(alg) ~= "number" then
+                    return nil
+                end
+                
+                -- Validate index parameter
+                if type(index) ~= "number" then
+                    return nil
+                end
+                
+                -- Convert to integers if needed
+                alg = math.floor(alg)
+                index = math.floor(index)
+                
+                -- Check algorithm bounds first
+                local algCount = _G.getAlgorithmCount()
+                if alg < 0 or alg >= algCount then
+                    return nil
+                end
+                
+                -- Check parameter bounds
+                local paramCount = _G.getParameterCount(alg)
+                if not paramCount or index < 0 or index >= paramCount then
+                    return nil
+                end
+                
+                -- For the emulator, return the actual parameter name
+                -- Convert from zero-based to one-based index for parameter lookup
+                local param = newScriptParameters and newScriptParameters[index + 1]
+                if param and param.name then
+                    return param.name
+                else
+                    -- Fallback to generic name if no specific name is available
+                    return "Parameter " .. (index + 1)
+                end
+            end
+            
+            -- Display Mode Control (API 1.10.0 Task 4)
+            -- Sets the display mode and returns success status
+            _G.setDisplayMode = function(mode)
+                -- Validate input parameter
+                if type(mode) ~= "string" then
+                    return false
+                end
+                
+                -- Use display module to set the mode (includes validation)
+                return display.setDisplayMode(mode)
+            end
 
             -- Add debug function for scripts
             _G.debug = function(str) print(tostring(str)) end
@@ -484,6 +585,10 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
             -- Add required fields to the script object (parameterOffset can be set here)
             newScript.parameterOffset = newScript.parameterOffset or 1 -- Use script-defined or default to 1
+            
+            -- Add algorithmIndex property for API 1.10.0 support
+            -- This provides the index of the algorithm in the preset
+            newScript.algorithmIndex = getCurrentAlgorithm() -- Use the current algorithm index
 
             -- Call setupUi if available
             if newScript.setupUi then
