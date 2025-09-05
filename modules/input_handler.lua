@@ -531,6 +531,9 @@ function M.mousemoved(x, y, dx, dy)
     local ldx = dx / M.uiScaleFactor
     local ldy = dy / M.uiScaleFactor
 
+    -- First check if controls handled the mouse movement
+    if M.controls.mousemoved(lx, ly, ldx, ldy) then return true end
+
     -- Check if mouse moved away from held BPM button
     if bpmButtonHeld then
         local bpmButtons = M.io_panel.getBPMButtonPositions()

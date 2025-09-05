@@ -674,9 +674,8 @@ function M.update(dt)
     time = signalProcessor.updateTime(dt)
     signalProcessor.updateTriggerPulses(scriptInputAssignments, script, scriptOutputAssignments)
 
-    -- Update active state based on current overlay and minimal mode
-    controls.setActive(windowManager.getActiveOverlay() == "controls" and
-                           not windowManager.isMinimalMode())
+    -- Update active state based on minimal mode (controls always active in unified layout)
+    controls.setActive(not windowManager.isMinimalMode())
 
     -- Only proceed with update if we have a valid script
     if not script then return end
