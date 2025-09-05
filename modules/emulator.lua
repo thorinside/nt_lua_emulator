@@ -843,12 +843,19 @@ function M.update(dt)
         love.graphics.rectangle("line", 0, 0, scaledDisplayWidth,
                                 scaledDisplayHeight)
 
-        -- Draw the active overlay
-        if windowManager.getActiveOverlay() == "controls" then
-            -- Draw the controls section below the display
-            controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
-            controls.draw()
-        else
+        -- Draw unified layout in new order: Display → Hardware Knobs → I/O Panel → Parameter Knobs
+        
+        -- 1. Hardware Controls (drawn immediately below display)
+        controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
+        controls.draw()
+        
+        -- Calculate Y position for I/O section below hardware controls
+        local controlsHeight = controls.getHeight()
+        local spacingBetweenSections = 40 -- Match window manager spacing
+        local ioStartY = (scaledDisplayHeight / windowManager.getUIScaleFactor()) + controlsHeight + spacingBetweenSections
+        
+        -- 2. I/O Panel section (drawn below hardware controls)
+        do
             -- Draw Script I/O panel (inputs & outputs)
             local layout = windowManager.getLayoutPositions()
             io_panel.drawScriptIO({
@@ -976,7 +983,7 @@ function M.update(dt)
                 love.graphics.setFont(prevFont) -- Restore previous font
             end
 
-            -- Draw Parameter Knobs
+            -- 3. Parameter Knobs (drawn at bottom with proper margin)
             parameter_knobs.draw({
                 scriptParameters = parameterManager.getParameters(),
                 displayWidth = display.getConfig().width,
@@ -986,7 +993,7 @@ function M.update(dt)
                 parameterAutomation = parameterManager.getParameterAutomation(),
                 uiScaleFactor = windowManager.getUIScaleFactor()
             })
-        end
+        end -- end do block
 
         -- Draw dragging line if needed
         local dragState = inputHandler.getDraggingState()
@@ -1163,6 +1170,8 @@ function M.keypressed(key)
     end
 
     -- Continue with normal key handling
+    -- Space bar toggle functionality disabled for unified UI layout
+    --[[
     if key == "space" then
         -- Only toggle overlays when not in minimal mode
         if not windowManager.isMinimalMode() then
@@ -1170,6 +1179,7 @@ function M.keypressed(key)
         end
         return
     end
+    --]]
 
     if key == "r" and love.keyboard.isDown("lctrl") then
         -- Ctrl+R: Force script reload
@@ -1439,12 +1449,19 @@ function M.draw()
         love.graphics.rectangle("line", 0, 0, scaledDisplayWidth,
                                 scaledDisplayHeight)
 
-        -- Draw the active overlay
-        if windowManager.getActiveOverlay() == "controls" then
-            -- Draw the controls section below the display
-            controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
-            controls.draw()
-        else
+        -- Draw unified layout in new order: Display → Hardware Knobs → I/O Panel → Parameter Knobs
+        
+        -- 1. Hardware Controls (drawn immediately below display)
+        controls.layout(0, 0, scaledDisplayWidth, scaledDisplayHeight)
+        controls.draw()
+        
+        -- Calculate Y position for I/O section below hardware controls
+        local controlsHeight = controls.getHeight()
+        local spacingBetweenSections = 40 -- Match window manager spacing
+        local ioStartY = (scaledDisplayHeight / windowManager.getUIScaleFactor()) + controlsHeight + spacingBetweenSections
+        
+        -- 2. I/O Panel section (drawn below hardware controls)
+        do
             -- Draw Script I/O panel (inputs & outputs)
             local layout = windowManager.getLayoutPositions()
             io_panel.drawScriptIO({
@@ -1572,7 +1589,7 @@ function M.draw()
                 love.graphics.setFont(prevFont) -- Restore previous font
             end
 
-            -- Draw Parameter Knobs
+            -- 3. Parameter Knobs (drawn at bottom with proper margin)
             parameter_knobs.draw({
                 scriptParameters = parameterManager.getParameters(),
                 displayWidth = display.getConfig().width,
@@ -1582,7 +1599,7 @@ function M.draw()
                 parameterAutomation = parameterManager.getParameterAutomation(),
                 uiScaleFactor = windowManager.getUIScaleFactor()
             })
-        end
+        end -- end do block
 
         -- Draw dragging line if needed
         local dragState = inputHandler.getDraggingState()

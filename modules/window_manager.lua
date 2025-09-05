@@ -43,7 +43,12 @@ function M.init(deps)
 
     -- Layout positions (starting after the display area)
     scriptIOPanelY = (scaledDisplayHeight / uiScaleFactor) + 20 -- Reduced top margin
-    physicalIOStartY = scriptIOPanelY -- Aligned with script I/O
+    
+    -- Physical I/O should be positioned below hardware controls, not aligned with script I/O
+    local controlsHeight = 120 -- Approximate height of hardware controls section (kPotRadius * 6 from controls.lua)
+    local spacingBetweenSections = 40 -- Match emulator.lua spacing
+    physicalIOStartY = (scaledDisplayHeight / uiScaleFactor) + controlsHeight + spacingBetweenSections
+    
     paramKnobPanelY = physicalIOStartY + 300 -- Adjusted based on physical I/O height
 
     return M
@@ -61,7 +66,12 @@ function M.setDisplayConfig(config)
 
     -- Update layout positions
     scriptIOPanelY = (scaledDisplayHeight / uiScaleFactor) + 20
-    physicalIOStartY = scriptIOPanelY
+    
+    -- Physical I/O should be positioned below hardware controls, not aligned with script I/O
+    local controlsHeight = 120 -- Approximate height of hardware controls section (kPotRadius * 6 from controls.lua)
+    local spacingBetweenSections = 40 -- Match emulator.lua spacing
+    physicalIOStartY = (scaledDisplayHeight / uiScaleFactor) + controlsHeight + spacingBetweenSections
+    
     paramKnobPanelY = physicalIOStartY + 300
 end
 
@@ -95,18 +105,17 @@ function M.calculateWindowHeight()
     -- Calculate the height of the display area in UI coordinates
     local displayAreaHeight = scaledDisplayHeight / uiScaleFactor
 
-    -- Add 24px margin that will be at the bottom of the window
-    local bottomMargin = 24
+    -- Add 16px margin that will be at the bottom of the window for parameter knobs
+    local bottomMargin = 16
 
-    if activeOverlay == "controls" then
-        -- For controls overlay - use the controls height function
-        return displayAreaHeight + M.controls.getHeight() + bottomMargin
+    -- For unified layout, calculate both controls and IO heights together
+    local controlsHeight = M.controls.getHeight()
+    
+    -- Calculate IO height
+    local ioHeight
+    if cachedIOHeight then
+        ioHeight = cachedIOHeight
     else
-        -- For IO overlay - use cached height if available, or calculate it
-        if cachedIOHeight then
-            return displayAreaHeight + cachedIOHeight + bottomMargin
-        end
-
         -- Set up parameters for IO panel layout calculation
         local params = {
             inputCount = M.scriptInputCount or 0,
@@ -120,20 +129,33 @@ function M.calculateWindowHeight()
         local scriptIOHeight = M.io_panel.getScriptIOHeight(params)
         local physicalIOHeight = M.io_panel.getPhysicalIOHeight()
 
-        -- Calculate parameter knobs height
+        -- Calculate parameter knobs height more accurately (matching parameter_knobs.lua calculation)
         local paramCount = M.scriptParameters and #M.scriptParameters or 0
-        local paramKnobRows = math.ceil(paramCount / 9)
-        local paramKnobHeight = 24 + (paramKnobRows * 24)
+        local paramKnobHeight = 0
+        if paramCount > 0 then
+            local knobsPerRow = 9
+            local paramKnobRows = math.ceil(paramCount / knobsPerRow)
+            local knobRadius = 12 * uiScaleFactor
+            local knobDiameter = knobRadius * 2
+            local nameHeight = 10 * uiScaleFactor
+            local valueHeight = 10 * uiScaleFactor
+            local autoHeight = 10 * uiScaleFactor
+            local knobTotalHeight = knobDiameter + nameHeight + valueHeight + (autoHeight * 0.5)
+            local rowSpacing = knobTotalHeight + 15 * uiScaleFactor
+            paramKnobHeight = (paramKnobRows * rowSpacing) + 20 -- Add 20px padding
+        end
 
-        -- Total content height
-        local totalIOHeight = scriptIOHeight + physicalIOHeight +
-                                  paramKnobHeight + 24 -- 24px spacing between sections
+        -- Total IO content height
+        ioHeight = scriptIOHeight + physicalIOHeight +
+                   paramKnobHeight + 24 -- 24px spacing between sections
 
         -- Cache the calculated height
-        cachedIOHeight = totalIOHeight
-
-        return displayAreaHeight + totalIOHeight + bottomMargin
+        cachedIOHeight = ioHeight
     end
+
+    -- For unified layout, combine both heights with spacing
+    local spacingBetweenSections = 40 -- Space between controls and IO sections
+    return displayAreaHeight + controlsHeight + spacingBetweenSections + ioHeight + bottomMargin
 end
 
 -- Update state from emulator
