@@ -191,6 +191,9 @@ function M.reloadScript(createDefaultMappings, prevInputAssignments,
         M.scriptLoader.loadScript(scriptPath, createDefaultMappings)
 
     if newScript then
+        -- Clear old error notifications from successful reload
+        M.notifications.clearErrors()
+        
         -- Update the script and parameters
         script = newScript
 

@@ -226,5 +226,11 @@ function M.mousepressed(x, y, button)
     return false -- Click was not handled by notifications
 end
 
+-- Clear all error notifications from the queue
+function M.clearErrors()
+    errorQueue = {}
+    print("Debug: All error notifications cleared")
+end
+
 -- Export the module
 return M
