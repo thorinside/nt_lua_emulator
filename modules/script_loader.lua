@@ -137,11 +137,40 @@ function M.loadScript(scriptPath, createDefaultMappings)
             _G.getCurrentAlgorithm = function() return 0 end
             _G.getCurrentParameter = function() return 0 end
             
+            -- Simulated algorithms for testing (mimicking real Disting NT algorithms)
+            local simulatedAlgorithms = {
+                {name = "EmulatedScript", params = newScriptParameters or {}},
+                {name = "Reverb", params = {
+                    {name = "Mix", min = 0, max = 100},
+                    {name = "Decay", min = 0, max = 100},
+                    {name = "Damping", min = 0, max = 100},
+                    {name = "Pre-delay", min = 0, max = 100}
+                }},
+                {name = "Delay", params = {
+                    {name = "Time", min = 0, max = 100},
+                    {name = "Feedback", min = 0, max = 100},
+                    {name = "Mix", min = 0, max = 100}
+                }},
+                {name = "Filter", params = {
+                    {name = "Cutoff", min = 0, max = 100},
+                    {name = "Resonance", min = 0, max = 100},
+                    {name = "Type", min = 0, max = 3}
+                }},
+                {name = "VCO", params = {
+                    {name = "Pitch", min = -60, max = 60},
+                    {name = "Waveform", min = 0, max = 4},
+                    {name = "PWM", min = 0, max = 100}
+                }}
+            }
+            
+            -- Update the first algorithm's params with current script params
+            simulatedAlgorithms[1].params = newScriptParameters or {}
+            
             -- Algorithm Query Functions (API 1.10.0)
             -- Returns the total number of algorithms in the current preset
             _G.getAlgorithmCount = function()
-                -- In the emulator, we simulate a single algorithm per preset
-                return 1
+                -- Simulate multiple algorithms like a real Disting NT
+                return #simulatedAlgorithms
             end
             
             -- Returns the display name for the algorithm at the specified index
@@ -160,9 +189,9 @@ function M.loadScript(scriptPath, createDefaultMappings)
                     return nil
                 end
                 
-                -- For the emulator, return a default algorithm name
-                -- In a real device, this would return the actual algorithm name
-                return "EmulatedScript"
+                -- Return the simulated algorithm name
+                local alg = simulatedAlgorithms[index + 1]  -- Convert from 0-based to 1-based
+                return alg and alg.name or nil
             end
             
             -- Parameter Query Functions (API 1.10.0)
@@ -182,9 +211,12 @@ function M.loadScript(scriptPath, createDefaultMappings)
                     return nil
                 end
                 
-                -- For the emulator, return the actual parameter count
-                -- In a real device, this would return the parameter count for the specified algorithm
-                return newScriptParameters and #newScriptParameters or 0
+                -- Get the simulated algorithm
+                local algorithm = simulatedAlgorithms[alg + 1]  -- Convert from 0-based to 1-based
+                if algorithm and algorithm.params then
+                    return #algorithm.params
+                end
+                return 0
             end
             
             -- Returns the parameter name for the specified algorithm and parameter indices
@@ -215,15 +247,17 @@ function M.loadScript(scriptPath, createDefaultMappings)
                     return nil
                 end
                 
-                -- For the emulator, return the actual parameter name
-                -- Convert from zero-based to one-based index for parameter lookup
-                local param = newScriptParameters and newScriptParameters[index + 1]
-                if param and param.name then
-                    return param.name
-                else
-                    -- Fallback to generic name if no specific name is available
-                    return "Parameter " .. (index + 1)
+                -- Get the simulated algorithm and parameter
+                local algorithm = simulatedAlgorithms[alg + 1]  -- Convert from 0-based to 1-based
+                if algorithm and algorithm.params then
+                    local param = algorithm.params[index + 1]  -- Convert from 0-based to 1-based
+                    if param and param.name then
+                        return param.name
+                    end
                 end
+                
+                -- Fallback to generic name if no specific name is available
+                return "Parameter " .. (index + 1)
             end
             
             -- Display Mode Control (API 1.10.0 Task 4)

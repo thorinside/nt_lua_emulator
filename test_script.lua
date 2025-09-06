@@ -1,199 +1,154 @@
--- Bouncy
---[[
-Bouncing ball test script.
-A general testing ground for scripting features.
-]]
---[[
-MIT License
+-- Comprehensive test script for Disting NT API 1.10.0 features
+local script = {}
 
-Copyright (c) 2025 Expert Sleepers Ltd
+-- State variables for demo
+local displayModeIndex = 1
+local displayModes = {"overview", "meters", "parameters", "ui", "algorithm", "menu"}
+local modeChangeTime = 0
+local frameCount = 0
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+script.inputs = {kCV, kCV, kCV, kCV}
+script.outputs = {kCV, kCV, kCV, kCV}
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-]]
-
--- test that require works
-require 'complex'
-local c = complex.add( complex.i, complex.new( 10, 20 ) )
-
-local time = 0
-local f = 2 * math.pi
-local x = 0
-local y = 0
-local dx = 5
-local dy = 6.7
-local bing = 0.0
-local lastMessage = ''
-local gateState = false
-
-local toScreenX = function( x )
-	return 1.0 + 2.5 * ( x + 10.0 )
-end
-local toScreenY = function( y )
-	return 12.0 + 2.5 * ( 10.0 - y )
+function script.init()
+    print("API 1.10.0 Test Script initialized!")
+    print("Algorithm Index: " .. tostring(script.algorithmIndex))
+    
+    -- Test new query functions
+    local algCount = getAlgorithmCount()
+    print("Total algorithms available: " .. algCount)
+    
+    if algCount > 0 then
+        print("First algorithm: " .. getAlgorithmName(0))
+        local paramCount = getParameterCount(0)
+        print("Parameters in algorithm 0: " .. paramCount)
+        if paramCount > 0 then
+            print("First parameter: " .. getParameterName(0, 0))
+        end
+    end
+    
+    -- Return the I/O configuration
+    return {
+        inputs = {kCV, kCV, kCV, kCV},
+        outputs = {kCV, kCV, kCV, kCV}
+    }
 end
 
-local lx = toScreenX( -10.0 )
-local cx = toScreenX( 0.0 )
-local rx = toScreenX( 10.0 )
-local ty = toScreenY( 10.0 )
-local cy = toScreenY( 0.0 )
-local by = toScreenY( -10.0 )
+function script.process(inputs, outputs)
+    frameCount = frameCount + 1
+    
+    -- Simple passthrough with some modulation
+    for i = 1, 4 do
+        outputs[i] = inputs[i] or 0
+    end
+    
+    -- Cycle through display modes every 3 seconds
+    if frameCount % 180 == 0 then  -- ~3 seconds at 60fps
+        displayModeIndex = (displayModeIndex % #displayModes) + 1
+        setDisplayMode(displayModes[displayModeIndex])
+        modeChangeTime = frameCount
+    end
+end
 
--- allocate a table to return from step(), rather than allocating a new one on every call
-local out = {}
+function script.draw()
+    -- Title with center alignment (new feature!)
+    drawText(128, 10, "API 1.10.0 Feature Test", 15, "centre")
+    
+    -- Show current display mode with right alignment
+    local modeText = "Mode: " .. displayModes[displayModeIndex]
+    drawText(254, 20, modeText, 15, "right")
+    
+    -- Left aligned info
+    drawText(2, 20, "Alg Index: " .. tostring(script.algorithmIndex or "nil"), 15, "left")
+    
+    -- Demo text alignment options
+    drawTinyText(2, 30, "LEFT", 15, "left")
+    drawTinyText(128, 30, "CENTER", 15, "centre")
+    drawTinyText(254, 30, "RIGHT", 15, "right")
+    
+    -- Show algorithm info if available
+    local algCount = getAlgorithmCount()
+    if algCount > 0 and script.algorithmIndex then
+        local algName = getAlgorithmName(script.algorithmIndex)
+        local paramCount = getParameterCount(script.algorithmIndex)
+        
+        drawText(128, 42, "Current: " .. (algName or "Unknown"), 15, "centre")
+        drawTinyText(128, 50, "Params: " .. (paramCount or 0), 15, "centre")
+        
+        -- Show first parameter name if available
+        if paramCount and paramCount > 0 then
+            local paramName = getParameterName(script.algorithmIndex, 1)
+            drawTinyText(128, 58, "P1: " .. (paramName or "?"), 15, "centre")
+        end
+    else
+        drawText(128, 46, "No algorithm loaded", 15, "centre")
+    end
+end
 
-return
-{
-	name = 'bouncy'
-,	author = 'Expert Sleepers Ltd'
-	
-,	init = function( self )
-		return
-		{
-			inputs = { kCV, kTrigger, kGate }		-- or inputs = integer if all CVs
-		,	inputNames = { [2]="Trigger input" }
-		,	outputs = 2
-		,	outputNames = { "X output", "Y output" }
-		,	parameters = 
-			{
-				{ "Min X", -10, 10, -10, kVolts }			-- min, max, default, unit
-			,	{ "Max X", -10, 10,  10, kVolts }
-			,	{ "Min Y", -100, 100, -100, kVolts, kBy10 }	-- min, max, default, unit, scale
-			,	{ "Max Y", -100, 100,  100, kVolts, kBy10 }
-			,	{ "Edges", { "Bounce", "Warp" }, 1 }		-- enums, default
-			,	{ "MIDI channel", 0, 16, 0 }
-			}
-		,	midi = { channelParameter = 6, messages = { "note", "cc", "bend", "aftertouch", "poly pressure", "program change" } }
-		}
-	end
-	
-,	trigger = function( self, input )
-		if input == 2 then
-			x = 0
-			y = 0
-		end
-	end
-	
-,	gate = function( self, input, rising )
-		if input == 3 then
-			gateState = rising
-		end
-	end
+-- Control callbacks to test interactivity
+function script.button1Push(self)
+    print("===== BUTTON 1 PRESSED =====")
+    print("Testing getAlgorithmName function")
+    local algCount = getAlgorithmCount()
+    print("Total algorithms: " .. algCount)
+    for i = 0, math.min(4, algCount - 1) do  -- Use 0-based indexing
+        local name = getAlgorithmName(i)
+        print(string.format("  Algorithm %d: %s", i, name or "nil"))
+    end
+    print("===========================")
+end
 
-,	step = function( self, dt, inputs )
-		x = x + dx * dt
-		y = y + dy * dt
-		if dx < 0 and x < self.parameters[1] then
-			if self.parameters[5] == 1 then
-				dx = -dx
-			else
-				x = x - self.parameters[1] + self.parameters[2]
-			end
-		elseif dx > 0 and x > self.parameters[2] then
-			if self.parameters[5] == 1 then
-				dx = -dx
-			else
-				x = x - self.parameters[2] + self.parameters[1]
-			end
-		end
-		if dy < 0 and y < self.parameters[3] then
-			if self.parameters[5] == 1 then
-				dy = -dy
-			else
-				y = y - self.parameters[3] + self.parameters[4]
-			end
-		elseif dy > 0 and y > self.parameters[4] then
-			if self.parameters[5] == 1 then
-				dy = -dy
-			else
-				y = y - self.parameters[4] + self.parameters[3]
-			end
-		end
-		time = time + dt
-		local t = f * time
-		out[1] = x + math.sin( t )
-		out[2] = y + inputs[1]
-		return out
-	end
+function script.button2Push(self)
+    print("===== BUTTON 2 PRESSED =====")
+    print("Testing getParameterName function")
+    local algIndex = self.algorithmIndex or 0
+    print("Current algorithm index: " .. algIndex)
+    local paramCount = getParameterCount(algIndex)
+    if paramCount and paramCount > 0 then
+        print("Parameters for algorithm " .. algIndex .. " (count: " .. paramCount .. "):")
+        for i = 0, math.min(4, paramCount - 1) do  -- Use 0-based indexing
+            local name = getParameterName(algIndex, i)
+            print(string.format("  Parameter %d: %s", i, name or "nil"))
+        end
+    else
+        print("No parameters found for algorithm " .. algIndex)
+    end
+    print("===========================")
+end
 
-,	midiMessage = function( self, message )
-		if message[1] == 0x90 then
-			lastMessage = "None on " .. message[2] .. " vel " .. message[3]
-		elseif message[1] == 0x80 then
-			lastMessage = "None off " .. message[2] .. " vel " .. message[3]
-		end
-	end
-	
-,	pot2Turn = function( self, x )
-		local alg = self.algorithmIndex
-		local p = self.parameterOffset + 1 + x * 3.5
-		focusParameter( alg, p )
-	end
+-- Also add button 3 and 4 for testing
+function script.button3Push(self)
+    print("===== BUTTON 3 PRESSED =====")
+    print("Cycling display mode manually")
+    displayModeIndex = (displayModeIndex % #displayModes) + 1
+    setDisplayMode(displayModes[displayModeIndex])
+    modeChangeTime = frameCount
+    print("Display mode changed to: " .. displayModes[displayModeIndex])
+    print("===========================")
+end
 
-,	pot3Turn = function( self, x )
-		standardPot3Turn( x )
-	end
-	
-, 	encoder1Turn = function( self, x )
-		bing = 0.5
-	end
-, 	encoder2Turn = function( self, x )
-		bing = 0.5
-	end
-, 	pot3Push = function( self )
-		setDisplayMode( "overview" )
-	end
-, 	encoder2Push = function( self )
-		setDisplayMode( "meters" )
-	end
-	
-,	ui = function( self )
-		return true
-	end
+function script.button4Push(self)
+    print("===== BUTTON 4 PRESSED =====")
+    print("Testing algorithmIndex property")
+    print("self.algorithmIndex = " .. tostring(self.algorithmIndex))
+    print("===========================")
+end
 
-,	draw = function( self )
-		local alg = self.algorithmIndex
-		local p = getCurrentParameter( alg ) - self.parameterOffset
-		drawRectangle( cx, ty, cx, by, 1 )
-		drawRectangle( lx, cy, rx, cy, 1 )
-		local x1 = toScreenX( self.parameters[1] )
-		local x2 = toScreenX( self.parameters[2] )
-		local y1 = toScreenY( self.parameters[4] )
-		local y2 = toScreenY( self.parameters[3] )
-		drawRectangle( x1, y1, x2, y1, p == 4 and 15 or 2 )
-		drawRectangle( x1, y2, x2, y2, p == 3 and 15 or 2 )
-		drawRectangle( x1, y1, x1, y2, p == 1 and 15 or 2 )
-		drawRectangle( x2, y1, x2, y2, p == 2 and 15 or 2 )
-		local px = toScreenX( x )
-		local py = toScreenY( y )
-		drawSmoothBox( px-1.0, py-1.0, px+1.0, py+1.0, 15.0 )
-		
-		if bing > 0.0 then
-			drawText( 100, 30, "bing!" )
-			bing = bing - 0.03
-		end
-		
-		drawText( 100, 40, gateState and "Open" or "Closed" )
+function script.encoder1Turn(self, delta)
+    -- Manually cycle display modes with encoder
+    if type(delta) == "table" then
+        delta = delta[1] or 0  -- Extract first value if it's a table
+    end
+    
+    if delta > 0 then
+        displayModeIndex = (displayModeIndex % #displayModes) + 1
+    else
+        displayModeIndex = displayModeIndex - 1
+        if displayModeIndex < 1 then displayModeIndex = #displayModes end
+    end
+    setDisplayMode(displayModes[displayModeIndex])
+    modeChangeTime = frameCount
+    print("Display mode changed to: " .. displayModes[displayModeIndex])
+end
 
-		drawText( 100, 50, lastMessage )
-
-		drawText( 100, 60, "Slot " .. alg )
-	end
-	
-}
+return script
