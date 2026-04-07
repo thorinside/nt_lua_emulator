@@ -127,51 +127,49 @@ end
 function M.updateAutomatedParameters(currentInputs)
     for paramIndex, inputIndex in pairs(parameterAutomation) do
         local sp = scriptParameters[paramIndex]
-        if not sp then goto continue end -- Skip if parameter doesn't exist
+        if sp then
+            -- Get the input voltage (already scaled for physical input)
+            local voltage = currentInputs[inputIndex] or 0
 
-        -- Get the input voltage (already scaled for physical input)
-        local voltage = currentInputs[inputIndex] or 0
+            -- Store base value (user-set value) if not already stored when connecting the parameter
+            if not sp.baseValue then sp.baseValue = sp.current end
+            local baseValue = sp.baseValue
 
-        -- Store base value (user-set value) if not already stored when connecting the parameter
-        if not sp.baseValue then sp.baseValue = sp.current end
-        local baseValue = sp.baseValue
+            if sp.type == "integer" or sp.type == "float" then
+                -- Calculate parameter range
+                local paramRange = sp.max - sp.min
 
-        if sp.type == "integer" or sp.type == "float" then
-            -- Calculate parameter range
-            local paramRange = sp.max - sp.min
+                -- Normalize the voltage by dividing by 12V
+                local normalizedVoltage = voltage / 12.0
 
-            -- Normalize the voltage by dividing by 12V
-            local normalizedVoltage = voltage / 12.0
+                local newValue = baseValue + (normalizedVoltage * paramRange)
 
-            local newValue = baseValue + (normalizedVoltage * paramRange)
+                -- For integer parameters, round to nearest whole number
+                if sp.type == "integer" then
+                    newValue = math.floor(newValue + 0.5)
+                end
 
-            -- For integer parameters, round to nearest whole number
-            if sp.type == "integer" then
-                newValue = math.floor(newValue + 0.5)
+                -- Ensure value is within bounds
+                sp.current = math.max(sp.min, math.min(sp.max, newValue))
+
+            elseif sp.type == "enum" and sp.values then
+                -- For enum parameters
+                local valueCount = #sp.values
+
+                -- Normalize the voltage by dividing by 12V
+                local normalizedVoltage = voltage / 12.0
+
+                -- Calculate how many steps to move from the base value
+                local enumRange = valueCount - 1
+                local offset = math.floor(normalizedVoltage * enumRange + 0.5)
+
+                -- Apply offset to base value
+                local newIndex = baseValue + offset
+
+                -- Ensure the index is valid
+                sp.current = math.max(1, math.min(valueCount, newIndex))
             end
-
-            -- Ensure value is within bounds
-            sp.current = math.max(sp.min, math.min(sp.max, newValue))
-
-        elseif sp.type == "enum" and sp.values then
-            -- For enum parameters
-            local valueCount = #sp.values
-
-            -- Normalize the voltage by dividing by 12V
-            local normalizedVoltage = voltage / 12.0
-
-            -- Calculate how many steps to move from the base value
-            local enumRange = valueCount - 1
-            local offset = math.floor(normalizedVoltage * enumRange + 0.5)
-
-            -- Apply offset to base value
-            local newIndex = baseValue + offset
-
-            -- Ensure the index is valid
-            sp.current = math.max(1, math.min(valueCount, newIndex))
         end
-
-        ::continue::
     end
 
     -- Update the script's parameters
