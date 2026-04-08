@@ -506,13 +506,32 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 end
 
                 -- Create a temporary chunk name for the script
-                local chunkName = "@" .. filePath:match("([^/]+)%.lua$") or
-                                      "unknown"
+                local scriptFileName = filePath:match("([^/\\]+)%.lua$") or
+                                           filePath:match("([^/\\]+)$") or
+                                           "unknown"
+                local chunkName = "@" .. scriptFileName
+
+                -- Strip UTF-8 BOM for Lua 5.4 compatibility
+                if content:sub(1, 3) == "\239\187\191" then
+                    content = content:sub(4)
+                end
 
                 -- Load the script content
-                local chunk, err = load(content, chunkName, "t", _G) -- Load with global env
+                -- LÖVE uses LuaJIT (Lua 5.1) where load() only accepts a function;
+                -- strings require loadstring() + setfenv(). Lua 5.2+ load() accepts strings.
+                local chunk, err
+                if _VERSION == "Lua 5.1" then
+                    chunk, err = loadstring(content, chunkName)
+                    if chunk then setfenv(chunk, _G) end
+                else
+                    chunk, err = load(content, chunkName, "t", _G)
+                    if not chunk then
+                        -- Fallback for binary/mixed chunks
+                        chunk, err = load(content, chunkName, "bt", _G)
+                    end
+                end
                 if not chunk then
-                    error("Error loading script: " .. err)
+                    error("Error loading script: " .. tostring(err))
                 end
 
                 -- Execute the chunk to get the script table
