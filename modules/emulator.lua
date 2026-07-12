@@ -12,6 +12,7 @@ local signalProcessor = require("modules.signal_processor")
 local uiState = require("modules.ui_state")
 local scriptManager = require("modules.script_manager")
 local midiHandler = require("modules.midi_handler")
+local controlScheduler = require("modules.control_scheduler").new(0.001, 100)
 
 -- Initialize the script loader with notification functions
 scriptLoader.init({
@@ -117,6 +118,9 @@ local function enableFunctionProfiling()
 end
 
 local disableFunctionProfiling = nil
+local legacyUpdateRendering = false
+local lastScriptDrawTime = -math.huge
+local scriptDrawInterval = 1 / 30
 
 -- Add this to the module's public interface
 -- Removed: function M.enableMemoryProfiling()
@@ -787,6 +791,9 @@ function M.update(dt)
         fontSmall = fontSmall
     })
 
+    -- Rendering belongs to love.draw. Keep the old update-phase block gated
+    -- off while it remains here to preserve the surrounding layout code.
+    if legacyUpdateRendering then
     -- Initialize time tracking for draw calls if not already set
     -- Commented out: if not M.lastDrawTime then M.lastDrawTime = 0 end
 
@@ -1050,41 +1057,24 @@ function M.update(dt)
         -- Draw notifications
         notifications.draw(fontDefault, fontSmall)
     end
-
-    -- Create inputs table to pass to script.step
-    local scriptInputValues = {}
+    end
 
     -- Reset unconnected outputs
     signalProcessor.resetUnconnectedOutputs(scriptOutputAssignments)
 
-    -- Call step function
-    local outputValues
-
-    -- Update input values for each step to check for gate transitions
+    -- Update physical input and parameter state once per host frame.
     currentInputs = signalProcessor.updateInputs(scriptInputAssignments, script, scriptOutputAssignments)
-
-    -- Update automated parameters
     parameterManager.updateAutomatedParameters(currentInputs)
 
-    -- Prepare script input values for each step
-    scriptInputValues = signalProcessor.prepareScriptInputValues(
-                            scriptInputCount, scriptInputAssignments)
-
-    -- Call the script's step function with the actual dt
-    outputValues = scriptManager.callScriptStep(dt, scriptInputValues) -- Changed first argument to dt
-
-    -- Update outputs with values from script
-    -- Only update outputs if the step function returned values
-    if type(outputValues) == "table" then
-        -- First, reset only the outputs that will be updated
-        for i = 1, scriptOutputCount do
-            local physicalOutput = scriptOutputAssignments[i]
-            if physicalOutput and outputValues[i] ~= nil then
-                currentOutputs[physicalOutput] = outputValues[i]
-            end
-        end
-    end
-    -- If step returns nil, outputs are preserved from gate/trigger functions
+    -- Firmware calls step at 1 kHz. A bounded accumulator preserves that
+    -- cadence across normal host frame rates without a runaway catch-up loop.
+    controlScheduler:advance(dt, function(stepDt)
+        local scriptInputValues = signalProcessor.prepareScriptInputValues(
+                                      scriptInputCount, scriptInputAssignments)
+        local outputValues = scriptManager.callScriptStep(stepDt,
+                                                          scriptInputValues)
+        signalProcessor.updateOutputs(outputValues, scriptOutputAssignments)
+    end)
 
     -- Send outputs via OSC
     osc_client.sendOutputs(currentOutputs)
@@ -1400,8 +1390,8 @@ function M.draw()
     local currentTime = love.timer.getTime()
     -- Commented out: local drawInterval = 0.0333
 
-    -- Only clear and redraw the script content at 30Hz
-    -- Commented out: if currentTime - M.lastDrawTime >= drawInterval then
+    -- Only clear and redraw script content at the firmware's 30 Hz cadence.
+    if currentTime - lastScriptDrawTime >= scriptDrawInterval then
     -- 1) Set up the display canvas for script drawing
     display.clear()
 
@@ -1417,7 +1407,8 @@ function M.draw()
     -- Reset canvas state
     love.graphics.setCanvas()
     love.graphics.pop()
-    -- Commented out: end
+        lastScriptDrawTime = currentTime
+    end
 
     -- Always render the display at full frame rate
     -- Reset color to white before rendering

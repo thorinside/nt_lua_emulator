@@ -358,8 +358,9 @@ function M.updateOutputs(outputValues, scriptOutputAssignments)
     -- This supports the behavior where returning nil keeps previous values
     if type(outputValues) ~= "table" then return currentOutputs end
 
-    for slot, value in ipairs(outputValues) do
-        if value ~= nil then
+    for slot, value in pairs(outputValues) do
+        if type(slot) == "number" and slot >= 1 and slot == math.floor(slot) and
+            value ~= nil then
             local mappedOutput = scriptOutputAssignments[slot]
             if mappedOutput then
                 currentOutputs[mappedOutput] = value

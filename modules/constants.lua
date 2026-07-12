@@ -10,8 +10,18 @@ kStepped = "stepped" -- Quantized/stepped output
 
 -- Parameter types
 kNone = "none"
+kDb = "dB"
+kDb_minInf = "dB_minInf"
 kPercent = "percent"
+kHz = "Hz"
 kSemitones = "semitones"
+kCents = "cents"
+kMs = "ms"
+kSeconds = "seconds"
+kFrames = "frames"
+kMIDINote = "midi_note"
+kMillivolts = "millivolts"
+kBPM = "bpm"
 
 -- Input polarity
 kBipolar = 0        -- -5V to +5V range

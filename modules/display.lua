@@ -57,6 +57,10 @@ local function alignedTextX(font, x, text, alignment)
     return x
 end
 
+local function pixel(value)
+    return math.floor(value)
+end
+
 -- Initialize the display
 function display.init(options)
     -- Override defaults with provided options
@@ -96,10 +100,8 @@ function display.drawRectangle(x1, y1, x2, y2, color)
     love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
+    x1, y1, x2, y2 = pixel(x1), pixel(y1), pixel(x2), pixel(y2)
     love.graphics.rectangle("fill", x1 * config.scaling, y1 * config.scaling,
-                            (x2 - x1) * config.scaling,
-                            (y2 - y1) * config.scaling)
-    love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
     love.graphics.pop()
@@ -121,6 +123,7 @@ function display.drawBox(x1, y1, x2, y2, color)
     love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
+    x1, y1, x2, y2 = pixel(x1), pixel(y1), pixel(x2), pixel(y2)
     love.graphics.rectangle("line", x1 * config.scaling, y1 * config.scaling,
                             (x2 - x1) * config.scaling,
                             (y2 - y1) * config.scaling)
@@ -143,7 +146,8 @@ function display.drawLine(x1, y1, x2, y2, color)
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
 
-    if math.floor(x1) == math.floor(x2) and math.floor(y1) == math.floor(y2) then
+    x1, y1, x2, y2 = pixel(x1), pixel(y1), pixel(x2), pixel(y2)
+    if x1 == x2 and y1 == y2 then
         -- Single point (particle) case
         love.graphics.points(x1 * config.scaling, y1 * config.scaling)
     else
@@ -195,6 +199,16 @@ end
 
 -- Draw an outlined circle
 function display.drawCircle(x, y, radius, color)
+    love.graphics.push("all")
+    local col = calculateColor(color)
+    love.graphics.setColor(col[1], col[2], col[3])
+    love.graphics.circle("line", pixel(x) * config.scaling,
+                         pixel(y) * config.scaling, pixel(radius) * config.scaling)
+    love.graphics.pop()
+end
+
+-- Draw an antialiased outlined circle without integer coordinate conversion.
+function display.drawSmoothCircle(x, y, radius, color)
     love.graphics.push("all")
     local col = calculateColor(color)
     love.graphics.setColor(col[1], col[2], col[3])
@@ -290,6 +304,7 @@ function display.createDrawingEnvironment()
         drawTinyText = display.drawTinyText,
         fillRectangle = display.fillRectangle,
         drawCircle = display.drawCircle,
+        drawSmoothCircle = display.drawSmoothCircle,
         fillCircle = display.fillCircle,
         -- Constants that might be used by scripts
         kBy10 = 10,

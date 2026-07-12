@@ -87,6 +87,8 @@ return {
   - `drawRectangle(x1, y1, x2, y2, color)`
   - `drawLine(x1, y1, x2, y2, color)`
   - `drawSmoothLine(x1, y1, x2, y2, color)`
+  - `drawCircle(x, y, radius, color)`
+  - `drawSmoothCircle(x, y, radius, color)`
 - **Helpers**:
   - `drawStandardParameterLine()`
   - `drawParameterLine(alg, param, yOffset)`
@@ -94,8 +96,10 @@ return {
 
 ## 6. Utility Functions
 - `getBusVoltage(alg, bus)`
+- `getCpuCycleCount()`, `getFirmwareVersion()`
 - `getCurrentAlgorithm()`, `getCurrentParameter(alg)`
 - `getParameter(alg, param)`, `setParameter(alg, param, value)`
 - `setParameterNormalized(alg, param, normValue)`
+- `sendI2CCommand(...)`, `sendI2CGetter(...)`, `sendMIDI(...)`
 - UI: `standardPot1Turn(value)`, etc.
 - Lookup: `findAlgorithm(name)`, `findParameter(alg, name)`

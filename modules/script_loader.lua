@@ -9,6 +9,7 @@ local osc_client = require("modules.osc_client")
 local debug_utils = require("modules.debug_utils")
 local json = require("lib.dkjson")
 local MinimalMode = require("modules.minimal_mode")
+local nt_api = require("modules.nt_api")
 
 -- Local vars
 local scriptLastModified = 0
@@ -484,6 +485,25 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 return midiHandler.sendMessage(byte1, byte2, byte3)
             end
 
+            -- Install the complete v1.17 compatibility layer last so it is the
+            -- authoritative implementation of documented SDK globals. The
+            -- accessors remain valid as the script and its parameters are
+            -- populated later in the load process.
+            local sdkApi = nt_api.create({
+                display = display,
+                helpers = helpers,
+                getScript = function() return newScript end,
+                getScriptParameters = function() return newScriptParameters end,
+                getAlgorithms = function() return simulatedAlgorithms end,
+                getBusVoltages = function()
+                    local signalProcessor = require("modules.signal_processor")
+                    return signalProcessor.getCurrentInputs()
+                end,
+                getTime = function() return love.timer.getTime() end,
+                getMidiHandler = function() return midiHandler end
+            })
+            for name, value in pairs(sdkApi) do _G[name] = value end
+
             local loadedScript -- Temporary variable to hold the script table
 
             -- Load script content based on path type
@@ -545,6 +565,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
             -- *** Assign loaded script to the outer scope variable ***
             newScript = loadedScript -- Now newScript is assigned
+            simulatedAlgorithms[1].name = newScript.name or "EmulatedScript"
 
             -- Load overall emulator state from state.json (Should this be outside pcall?)
             -- Keeping it inside for now, as it interacts with script state.
@@ -614,6 +635,11 @@ function M.loadScript(scriptPath, createDefaultMappings)
                         helpers.updateScriptParameters(newScriptParameters,
                                                        newScript)
                     end
+                elseif initResult == true then
+                    -- UI scripts use callbacks without a self argument.
+                    newScript.isUiScript = true
+                elseif type(initResult) == "string" then
+                    error("UI script initialization failed: " .. initResult)
                 end
             end
 

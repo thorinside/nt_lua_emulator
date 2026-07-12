@@ -79,6 +79,19 @@ function M.hasControlCallbacks(scriptObj)
                nil or scriptObj.button4Release ~= nil
 end
 
+local function callControlCallback(scriptObj, callback, ...)
+    if scriptObj.isUiScript then
+        local success, result = pcall(callback, ...)
+        if not success and M.notifications and
+            M.notifications.showErrorNotification then
+            M.notifications.showErrorNotification("Script error: " ..
+                                                      tostring(result))
+        end
+        return success and result or nil
+    end
+    return M.safeScriptCall(callback, scriptObj, ...)
+end
+
 -- Set script control callbacks for the controls module
 function M.setupControlCallbacks(scriptObj)
     if not scriptObj then return false end
@@ -88,10 +101,10 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "button" .. buttonIndex .. "Push"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 elseif scriptObj.button then
-                    M.safeScriptCall(scriptObj.button, scriptObj, buttonIndex,
-                                     true)
+                    callControlCallback(scriptObj, scriptObj.button, buttonIndex,
+                                        true)
                 end
             end
         end,
@@ -99,10 +112,10 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "button" .. buttonIndex .. "Release"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 elseif scriptObj.button then
-                    M.safeScriptCall(scriptObj.button, scriptObj, buttonIndex,
-                                     false)
+                    callControlCallback(scriptObj, scriptObj.button, buttonIndex,
+                                        false)
                 end
             end
         end,
@@ -114,9 +127,9 @@ function M.setupControlCallbacks(scriptObj)
                                          potIndex, value))
                 local functionName = "pot" .. potIndex .. "Turn"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj, value)
+                    callControlCallback(scriptObj, scriptObj[functionName], value)
                 elseif scriptObj.pot then
-                    M.safeScriptCall(scriptObj.pot, scriptObj, potIndex, value)
+                    callControlCallback(scriptObj, scriptObj.pot, potIndex, value)
                 end
             end
         end,
@@ -124,7 +137,7 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "pot" .. potIndex .. "Push"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 end
             end
         end,
@@ -132,7 +145,7 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "pot" .. potIndex .. "Release"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 end
             end
         end,
@@ -140,10 +153,10 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "encoder" .. encoderIndex .. "Turn"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj, delta)
+                    callControlCallback(scriptObj, scriptObj[functionName], delta)
                 elseif scriptObj.encoder then
-                    M.safeScriptCall(scriptObj.encoder, scriptObj, encoderIndex,
-                                     delta)
+                    callControlCallback(scriptObj, scriptObj.encoder,
+                                        encoderIndex, delta)
                 end
             end
         end,
@@ -151,7 +164,7 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "encoder" .. encoderIndex .. "Push"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 end
             end
         end,
@@ -159,7 +172,7 @@ function M.setupControlCallbacks(scriptObj)
             if scriptObj then
                 local functionName = "encoder" .. encoderIndex .. "Release"
                 if scriptObj[functionName] then
-                    M.safeScriptCall(scriptObj[functionName], scriptObj)
+                    callControlCallback(scriptObj, scriptObj[functionName])
                 end
             end
         end
@@ -222,7 +235,12 @@ end
 -- Call the script's draw function
 function M.callScriptDraw()
     if not script or not script.draw then return false end
-    return M.safeScriptCall(script.draw, script)
+    local result = callControlCallback(script, script.draw)
+    if not script.isUiScript and not result and
+        type(_G.drawStandardParameterLine) == "function" then
+        _G.drawStandardParameterLine()
+    end
+    return result
 end
 
 -- Get script I/O counts

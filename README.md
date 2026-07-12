@@ -193,11 +193,10 @@ When writing scripts for the Disting NT:
 
 3. Drawing functions for the display:
    - `drawRectangle`, `drawBox`, `drawSmoothBox`
-   - `drawLine`, `drawSmoothLine`
+   - `drawLine`, `drawSmoothLine`, `drawCircle`, `drawSmoothCircle`
    - `drawText(x, y, text[, color[, alignment]])`
    - `drawTinyText(x, y, text[, color[, alignment]])`
-   - `fillRectangle`
-   - `drawCircle`, `fillCircle`
+   - `drawParameterLine`, `drawStandardParameterLine`, `drawAlgorithmUI`
 
    Text color is a shade from `0` to `15` and defaults to `15`. Alignment
    defaults to left; pass `"centre"` or `"right"` to anchor the text at the
@@ -205,6 +204,8 @@ When writing scripts for the Disting NT:
 
 The matching official Lua scripting manual is stored at
 [`docs/reference/disting_NT_lua_scripting_1.17.pdf`](docs/reference/disting_NT_lua_scripting_1.17.pdf).
+The audited support matrix and documented emulator boundaries are in
+[`docs/sdk-conformance.md`](docs/sdk-conformance.md).
 
 ## Configuration
 
