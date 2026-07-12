@@ -88,7 +88,7 @@ local api = nt_api.create({
     getScript = function() return script end,
     getScriptParameters = function() return parameters end,
     getAlgorithms = function() return algorithms end,
-    getBusVoltages = function() return {[1] = 1.25, [28] = -2.5} end,
+    getBusVoltages = function() return {[1] = 1.25, [64] = -2.5} end,
     getTime = function() return 8 end,
     getMidiHandler = function() return midi end,
     sendI2CCommand = function(address, bytes)
@@ -136,7 +136,8 @@ assertEqual(script.parameters[1], 2.5, "normalized parameter write")
 assertEqual(api.getCurrentParameter(0), 2, "parameter focus")
 
 assertEqual(api.getBusVoltage(0, 0), 1.25, "first bus voltage")
-assertEqual(api.getBusVoltage(0, 27), -2.5, "last bus voltage")
+assertEqual(api.getBusVoltage(0, 63), -2.5, "last bus voltage")
+assertEqual(api.getBusVoltage(0, 64), 0.0, "out-of-range bus voltage")
 assertEqual(api.getCpuCycleCount(), 505032704, "32-bit cycle counter wrap")
 local major, minor, point, version = api.getFirmwareVersion()
 assertEqual(major, 1, "firmware major")

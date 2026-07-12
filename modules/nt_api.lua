@@ -192,7 +192,7 @@ function M.create(options)
 
     function api.getBusVoltage(_, busIndex)
         busIndex = integer(busIndex)
-        if not busIndex or busIndex < 0 or busIndex >= 28 then return 0.0 end
+        if not busIndex or busIndex < 0 or busIndex >= 64 then return 0.0 end
         local values = options.getBusVoltages and options.getBusVoltages() or {}
         return values[busIndex + 1] or 0.0
     end

@@ -25,9 +25,10 @@ Baseline: Expert Sleepers Lua scripting manual v1.17, stored in
 
 ## Emulator boundaries
 
-- The emulator exposes the NT's 28 logical bus indices. Its hardware panel
-  still models the physical 12 inputs and 8 outputs; unrepresented logical
-  buses read as 0 V and cannot be patched to a physical jack.
+- The emulator exposes all 64 logical bus indices. Its hardware panel still
+  models the physical 12 inputs and 8 outputs; the remaining 44 aux buses read
+  as 0 V unless supplied by an emulator backend and cannot be patched directly
+  to a physical jack.
 - I2C calls support both documented argument forms. Without an attached I2C
   backend, commands are no-ops and getters return the requested number of zero
   bytes.
