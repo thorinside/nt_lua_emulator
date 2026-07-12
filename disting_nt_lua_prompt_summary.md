@@ -78,8 +78,10 @@ return {
 ## 5. Drawing API
 - **Display**: 256×64 px, 16 shades (0–15)
 - **Text**:
-  - `drawText(x, y, str[, color])`
-  - `drawTinyText(x, y, str)`
+  - `drawText(x, y, str[, color[, alignment]])`
+  - `drawTinyText(x, y, str[, color[, alignment]])`
+  - `color` is a shade from 0–15 and defaults to 15
+  - `alignment` may be `"centre"` or `"right"`; omitted means left-aligned
 - **Primitives**:
   - `drawBox(x1, y1, x2, y2, color)`
   - `drawRectangle(x1, y1, x2, y2, color)`

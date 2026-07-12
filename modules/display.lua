@@ -36,12 +36,25 @@ local function calculateColor(colorValue)
     -- Base brightness adjustment with better handling for dark colors
     local shade = math.max(colorValue, 0) / 15
 
-    shade = math.pow(shade, config.brightnessExp)
+    shade = shade ^ config.brightnessExp
 
     return {
         shade * config.baseColor[1], shade * config.baseColor[2],
         shade * config.baseColor[3]
     }
+end
+
+-- Apply the optional text alignment argument used by the disting NT Lua API.
+-- Font metrics are in scaled LÖVE pixels, while script coordinates are in the
+-- display's native 256x64 coordinate space.
+local function alignedTextX(font, x, text, alignment)
+    if alignment == "centre" or alignment == "center" then
+        return x - font:getWidth(text) / (2 * config.scaling)
+    elseif alignment == "right" then
+        return x - font:getWidth(text) / config.scaling
+    end
+
+    return x
 end
 
 -- Initialize the display
@@ -150,18 +163,7 @@ function display.drawText(x, y, text, color, alignment)
     -- Use our pixel font
     love.graphics.setFont(config.pixelFont)
 
-    -- Calculate position based on alignment
-    alignment = alignment or "left"
-    local adjustedX = x
-    
-    if alignment == "centre" or alignment == "center" then
-        local textWidth = config.pixelFont:getWidth(text)
-        adjustedX = x - textWidth / 2 / config.scaling
-    elseif alignment == "right" then
-        local textWidth = config.pixelFont:getWidth(text)
-        adjustedX = x - textWidth / config.scaling
-    -- "left" is default, no adjustment needed
-    end
+    local adjustedX = alignedTextX(config.pixelFont, x, text, alignment)
 
     -- Draw the text
     love.graphics.print(text, adjustedX * config.scaling,
@@ -243,18 +245,7 @@ function display.drawTinyText(x, y, text, color, alignment)
     -- Use our tiny font
     love.graphics.setFont(config.tinyFont)
 
-    -- Calculate position based on alignment
-    alignment = alignment or "left"
-    local adjustedX = x
-    
-    if alignment == "centre" or alignment == "center" then
-        local textWidth = config.tinyFont:getWidth(text)
-        adjustedX = x - textWidth / 2 / config.scaling
-    elseif alignment == "right" then
-        local textWidth = config.tinyFont:getWidth(text)
-        adjustedX = x - textWidth / config.scaling
-    -- "left" is default, no adjustment needed
-    end
+    local adjustedX = alignedTextX(config.tinyFont, x, text, alignment)
 
     -- Draw the text
     love.graphics.print(text, adjustedX * config.scaling,
