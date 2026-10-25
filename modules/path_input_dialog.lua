@@ -2,6 +2,8 @@
 -- A simple path input dialog with tab completion
 local PathInputDialog = {}
 local json = require("lib.dkjson")
+local shellPath = require("modules.shell_path")
+local completionPath = nil
 
 -- State
 local isOpen = false
@@ -50,7 +52,7 @@ function PathInputDialog.open(onPathSelected)
         local content = stateFile:read("*a")
         stateFile:close()
         local success, result = pcall(json.decode, content)
-        if success and result.scriptPath then
+        if success and type(result) == "table" and type(result.scriptPath) == "string" then
             initialPath = result.scriptPath
         end
     end
@@ -62,6 +64,8 @@ function PathInputDialog.open(onPathSelected)
     -- Reset completions
     completions = {}
     selectedCompletion = 1
+    completionPath = nil
+    lastKeyPressed, isRepeating, repeatTimer = nil, false, 0
 
     isOpen = true
 end
@@ -69,6 +73,9 @@ end
 -- Get path completions for the current input
 local function updateCompletions()
     completions = {}
+    completionPath = inputText
+    -- POSIX completion is optional; manual path entry still works elsewhere.
+    if package.config:sub(1, 1) == "\\" or inputText:find("\0", 1, true) then return end
 
     -- Get the base path and partial name
     local basePath, partialName = "", ""
@@ -87,26 +94,19 @@ local function updateCompletions()
     if partialName:sub(1, 1) == "/" then partialName = partialName:sub(2) end
 
     -- Use io.popen to list files that match the partial name
-    local cmd = 'ls -a "' .. basePath .. '" 2>/dev/null'
-    local handle = io.popen(cmd)
+    -- One process per scan, not one additional process per matching entry.
+    local cmd = 'ls -1ap ' .. shellPath.quote(basePath) .. ' 2>/dev/null'
+    local ok, handle = pcall(io.popen, cmd)
 
-    if handle then
-        for line in handle:lines() do
+    if ok and handle then
+        for entry in handle:lines() do
+            local line = entry
+            local isDir = line:sub(-1) == "/"
+            if isDir then line = line:sub(1, -2) end
             -- Skip . and .. if we're at the start of input
             if (line ~= "." and line ~= "..") or partialName ~= "" then
                 -- Check if it matches the partial name
                 if partialName == "" or line:sub(1, #partialName) == partialName then
-                    -- Check if it's a directory
-                    local isDir = false
-                    local dirCheck = io.popen(
-                                         'test -d "' .. basePath .. '/' .. line ..
-                                             '" && echo "true" || echo "false"')
-                    if dirCheck then
-                        local result = dirCheck:read("*l")
-                        isDir = (result == "true")
-                        dirCheck:close()
-                    end
-
                     -- Add slash to directories
                     local displayName = line
                     if isDir then displayName = line .. "/" end
@@ -251,8 +251,8 @@ function PathInputDialog.keypressed(key, scancode, isrepeat)
             local completion = completions[selectedCompletion]
             inputText = completion.fullPath
             cursorPosition = #inputText
-            updateCompletions()
         end
+        updateCompletions()
         return true
     elseif key == "up" then
         -- Move completion selection up
@@ -402,8 +402,9 @@ function PathInputDialog.update(dt)
         end
     end
 
-    -- If completions list is empty and we have input, update completions
-    if #completions == 0 and #inputText > 0 then updateCompletions() end
+    -- Cache misses too: a nonexistent folder must not spawn ls every frame.
+    -- Tab explicitly refreshes when directory contents change.
+    if completionPath ~= inputText and #inputText > 0 then updateCompletions() end
 end
 
 -- Draw the dialog

@@ -26,6 +26,17 @@ end
 -- Helper function to log debug information
 local function debugLog(...) debug_utils.debugLog("[OSC]", ...) end
 
+local function connect(host, port)
+    local ok, result = pcall(osc.new, host, port)
+    if not ok then
+        client, enabled = nil, false
+        print("OSC unavailable: " .. tostring(result))
+        return false, result
+    end
+    client, enabled = result, true
+    return true
+end
+
 -- Initialize the OSC client
 function osc_client.init()
     -- Try to load emulator for debug access
@@ -46,8 +57,7 @@ function osc_client.init()
     end
 
     -- Create OSC client
-    client = osc.new(currentConfig.osc.host, currentConfig.osc.port)
-    enabled = true
+    if not connect(currentConfig.osc.host, currentConfig.osc.port) then return false end
     print(string.format("OSC client initialized: %s:%d", currentConfig.osc.host,
                         currentConfig.osc.port))
 end
@@ -79,8 +89,7 @@ function osc_client.toggle()
             port = currentConfig.osc.port or port
         end
 
-        client = osc.new(host, port)
-        enabled = true
+        if not connect(host, port) then return false end
         print(string.format("OSC enabled: %s:%d", host, port))
     end
 end

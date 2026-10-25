@@ -37,29 +37,29 @@ function love.conf(t)
         -- Try to parse JSON properly if we have the json module
         if json and json.decode then
             local success, state = pcall(json.decode, content)
-            if success and state then
+            if success and type(state) == "table" then
                 -- Get parameter count if available
-                if state.scriptParameters then
+                if type(state.scriptParameters) == "table" then
                     parameterCount = #state.scriptParameters
                 end
 
                 -- Get input/output counts if available
-                if state.inputs then
+                if type(state.inputs) == "table" then
                     local maxInput = 0
                     for k, _ in pairs(state.inputs) do
                         local num = tonumber(k)
-                        if num and num > maxInput then
+                        if num and num % 1 == 0 and num <= 12 and num > maxInput then
                             maxInput = num
                         end
                     end
                     scriptInputCount = maxInput
                 end
 
-                if state.outputs then
+                if type(state.outputs) == "table" then
                     local maxOutput = 0
                     for k, _ in pairs(state.outputs) do
                         local num = tonumber(k)
-                        if num and num > maxOutput then
+                        if num and num % 1 == 0 and num <= 8 and num > maxOutput then
                             maxOutput = num
                         end
                     end
@@ -72,7 +72,9 @@ function love.conf(t)
                 end
 
                 -- Get window position if available
-                if state.window and state.window.x and state.window.y then
+                if type(state.window) == "table" and
+                    type(state.window.x) == "number" and math.abs(state.window.x) < math.huge and
+                    type(state.window.y) == "number" and math.abs(state.window.y) < math.huge then
                     -- Set window position from saved state
                     t.window.x = state.window.x
                     t.window.y = state.window.y

@@ -1,6 +1,7 @@
 -- file_dialog.lua
 -- Implements a simple file dialog for the emulator
 local FileDialog = {}
+local shellPath = require("modules.shell_path")
 
 -- State
 local isOpen = false
@@ -43,10 +44,11 @@ local function listDirectory()
     directories = {}
 
     -- Use io.popen to list directories and files
-    local cmd = 'ls -la "' .. currentDir .. '" 2>/dev/null'
-    local handle = io.popen(cmd)
+    if package.config:sub(1, 1) == "\\" then return end
+    local cmd = 'ls -la ' .. shellPath.quote(currentDir) .. ' 2>/dev/null'
+    local ok, handle = pcall(io.popen, cmd)
 
-    if not handle then
+    if not ok or not handle then
         print("Failed to list directory: " .. currentDir)
         return
     end
@@ -92,7 +94,7 @@ function FileDialog.open(onFileSelected)
     callback = onFileSelected
 
     -- Get script directory from config
-    local config = require("config")
+    local config = require("modules.config")
     local cfg = config.load()
     local scriptDir = love.filesystem.getWorkingDirectory()
 
@@ -161,7 +163,7 @@ function FileDialog.keypressed(key)
         else
             -- It's a file, select it
             local fileName = files[selectedIndex - #directories]
-            if callback then
+            if callback and fileName then
                 local fullPath
                 if currentDir:sub(-1) == "/" then
                     fullPath = currentDir .. fileName

@@ -1,6 +1,7 @@
 -- script_loader.lua
 -- Module for loading and managing scripts for the NT Lua Emulator
 local M = {}
+local scriptGuard = require("modules.script_guard")
 
 -- Required modules
 local helpers = require("modules.helpers")
@@ -23,9 +24,9 @@ local midiHandler = nil
 
 -- Function to safely call script functions with pcall
 local function safeScriptCall(func, scriptObj, ...)
-    if not func then return nil end
+    if not func or scriptGuard.isDisabled(func) then return nil end
 
-    local status, result = pcall(func, scriptObj, ...)
+    local status, result = scriptGuard.call(func, scriptObj, ...)
     if not status then
         showErrorNotification("Script error: " .. tostring(result))
         return nil
@@ -79,12 +80,17 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
     -- Save original package.path
     local original_package_path = package.path
+    local previousGlobals = {}
+    for key, value in pairs(_G) do previousGlobals[key] = value end
+    local previousDisplayMode = display.getDisplayMode()
+    local requirePath = filePath:gsub("%.lua$", "")
+    local previousModule = package.loaded[requirePath]
     local success, result
 
     -- Use pcall to wrap the loading/initialization process to ensure path restoration
     -- Capture all results from pcall into a table
     local pcall_results = {
-        pcall(function()
+        scriptGuard.load(function()
             -- Determine the script's directory using string manipulation
             local scriptDir = getDirectoryFromPath(filePath)
             local path_sep = package.config:sub(1, 1) -- Usually '/' or '\\'
@@ -502,8 +508,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 end
 
                 -- Create a temporary chunk name for the script
-                local chunkName = "@" .. filePath:match("([^/]+)%.lua$") or
-                                      "unknown"
+                local chunkName = "@" .. (filePath:match("([^/]+)$") or "unknown")
 
                 -- Load the script content
                 local chunk, err = load(content, chunkName, "t", _G) -- Load with global env
@@ -512,9 +517,9 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 end
 
                 -- Execute the chunk to get the script table
-                local execStatus, resultTable = pcall(chunk)
+                local execStatus, resultTable = scriptGuard.load(chunk)
                 if not execStatus then
-                    error("Error executing script: " .. resultTable)
+                    error("Error executing script: " .. tostring(resultTable))
                 end
                 if not resultTable then
                     error("Error: Script returned nil: " .. filePath)
@@ -524,12 +529,11 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 print("Successfully loaded script from (absolute):", filePath)
             else
                 -- For relative paths, use require
-                local requirePath = filePath:gsub("%.lua$", "")
                 package.loaded[requirePath] = nil -- Ensure fresh load
 
-                local requireStatus, resultTable = pcall(require, requirePath)
+                local requireStatus, resultTable = scriptGuard.load(require, requirePath)
                 if not requireStatus then
-                    error("Error loading script via require: " .. resultTable)
+                    error("Error loading script via require: " .. tostring(resultTable))
                 end
                 if not resultTable then
                     error("Error: Script returned nil via require: " .. filePath)
@@ -538,6 +542,8 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 loadedScript = resultTable
                 print("Successfully loaded script from (relative):", filePath)
             end
+
+            if type(loadedScript) ~= "table" then error("Script must return a table") end
 
             -- *** Assign loaded script to the outer scope variable ***
             newScript = loadedScript -- Now newScript is assigned
@@ -560,7 +566,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 if readSuccess then
                     local decodeSuccess, decodedJson = pcall(json.decode,
                                                              content)
-                    if decodeSuccess then
+                    if decodeSuccess and type(decodedJson) == "table" then
                         emulatorState = decodedJson
                         print("ScriptLoader: Successfully loaded state.json")
                     else
@@ -599,12 +605,9 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
             -- Call script's init function
             if newScript.init then
-                local initResult = safeScriptCall(newScript.init, newScript) -- safeScriptCall handles pcall internally
-                if initResult == nil then
-                    -- safeScriptCall already printed error, maybe re-throw?
-                    -- error("Error during script init function") -- Option to halt loading on init error
-                    print("Warning: Error occurred during script init function.")
-                elseif type(initResult) == "table" then
+                local initialized, initResult = scriptGuard.load(newScript.init, newScript)
+                if not initialized then error("Script init failed: " .. tostring(initResult)) end
+                if type(initResult) == "table" then
                     newScript.inputs = initResult.inputs or newScript.inputs
                     newScript.outputs = initResult.outputs or newScript.outputs
                     newScript.inputNames =
@@ -630,13 +633,24 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
             -- Call setupUi if available
             if newScript.setupUi then
-                local potPositions =
-                    safeScriptCall(newScript.setupUi, newScript)
+                local setup, potPositions = scriptGuard.load(newScript.setupUi, newScript)
+                if not setup then error("Script setupUi failed: " .. tostring(potPositions)) end
                 if potPositions and type(potPositions) == "table" then
                     local controls = require("modules.controls")
                     controls.setPotPositions(potPositions)
                     debug_utils.debugLog(
                         "Set pot positions from script's setupUi")
+                end
+            end
+
+            -- Bound declarations consumed by host-side loops after the guard exits.
+            -- 64 is the NT bus count, well above the emulator's physical I/O count.
+            for _, name in ipairs({"inputs", "outputs"}) do
+                local value = newScript[name]
+                local count = type(value) == "table" and #value or value
+                if count ~= nil and (type(count) ~= "number" or count ~= count or
+                    count < 0 or count > 64 or count % 1 ~= 0) then
+                    error("Script " .. name .. " must declare 0 to 64 channels")
                 end
             end
 
@@ -695,22 +709,24 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 local c = sf:read("*a");
                 sf:close();
                 local dec, js = pcall(json.decode, c);
-                if dec then emulatorState = js end
+                if dec and type(js) == "table" then emulatorState = js end
             end
         end)
         emulatorState.scriptPath = scriptPath
-        pcall(function()
-            local sf = io.open("state.json", "w");
-            if sf then
-                sf:write(json.encode(emulatorState, {indent = true}));
-                sf:close()
-            end
-        end)
+        local saved, saveError = require("modules.json_store").save("state.json", emulatorState)
+        if not saved then
+            showErrorNotification("Could not save script path: " .. tostring(saveError))
+        end
 
         return loadedScript, scriptParams
     else
         -- pcall failed
-        local error_message = pcall_results[2] -- Error message is the second element
+        local error_message = pcall_results[2]
+        -- Shallow rollback of host/SDK bindings, not arbitrary script side effects.
+        for key in pairs(_G) do if previousGlobals[key] == nil then _G[key] = nil end end
+        for key, value in pairs(previousGlobals) do _G[key] = value end
+        package.loaded[requirePath] = previousModule
+        display.setDisplayMode(previousDisplayMode)
         showErrorNotification("Failed to load script: " ..
                                   tostring(error_message))
         print("Error during script load/init process:", tostring(error_message))
@@ -726,7 +742,8 @@ function M.serialiseState(script)
     end
 
     -- Call the script's serialise function
-    local status, state = pcall(script.serialise, script)
+    if scriptGuard.isDisabled(script.serialise) then return nil end
+    local status, state = scriptGuard.call(script.serialise, script)
     if not status then
         if showErrorNotification then
             showErrorNotification("Error serialising script state: " ..
@@ -759,7 +776,7 @@ function M.saveScriptState(script)
 
         if readSuccess then
             local success, result = pcall(json.decode, content)
-            if success then state = result end
+            if success and type(result) == "table" then state = result end
         else
             print("Error reading state file:", content) -- content will contain the error message
             -- Make sure the file is closed if there was an error
@@ -770,27 +787,7 @@ function M.saveScriptState(script)
     -- Add script state to the state object
     state.scriptState = scriptState
 
-    -- Write updated state back to file
-    local stateFile = io.open("state.json", "w")
-    if stateFile then
-        -- Protect the file writing operation with pcall
-        local writeSuccess, err = pcall(function()
-            stateFile:write(json.encode(state, {indent = true}))
-            stateFile:close()
-            return true
-        end)
-
-        if writeSuccess then
-            return true
-        else
-            print("Error writing state file:", err)
-            -- Make sure the file is closed if there was an error
-            pcall(function() if stateFile then stateFile:close() end end)
-            return false
-        end
-    end
-
-    return false
+    return require("modules.json_store").save("state.json", state)
 end
 
 -- Check if a file has been modified

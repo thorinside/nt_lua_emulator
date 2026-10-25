@@ -1,5 +1,6 @@
 -- emulator.lua
 local M = {} -- We'll return this table.
+local scriptGuard = require("modules.script_guard")
 
 -- Import refactored modules
 local scriptLoader = require("modules.script_loader")
@@ -239,9 +240,9 @@ end
 
 -- Function to safely call script functions with pcall (delegate to scriptLoader)
 local function safeScriptCall(func, scriptObj, ...)
-    if not func then return nil end
+    if not func or scriptGuard.isDisabled(func) then return nil end
 
-    local status, result = pcall(func, scriptObj, ...)
+    local status, result = scriptGuard.call(func, scriptObj, ...)
     if not status then
         showErrorNotification("Script error: " .. tostring(result))
         return nil
@@ -323,7 +324,7 @@ local function saveIOState(forceSave)
         print("Saved parameter values to state.")
     end
 
-    ioState.saveIOState(state, forceSave)
+    return ioState.saveIOState(state, forceSave)
 end
 
 -- Load IO mappings from state.json (delegate to ioState)
@@ -585,7 +586,7 @@ function M.load()
         local content = stateFile:read("*a")
         stateFile:close()
         local success, result = pcall(json.decode, content)
-        if success and result.scriptPath then
+        if success and type(result) == "table" and type(result.scriptPath) == "string" then
             scriptPath = result.scriptPath
             scriptManager.setScriptPath(scriptPath)
         end
@@ -1233,8 +1234,9 @@ function M.keypressed(key)
     elseif key == "s" and love.keyboard.isDown("lctrl") then
         -- Ctrl+S: Save current I/O mappings
         markMappingsChanged() -- Mark as changed to force save
-        saveIOState(true) -- Force save
-        print("I/O mappings manually saved to " .. stateFile)
+        local saved, err = saveIOState(true)
+        if saved then print("I/O mappings manually saved to " .. stateFile)
+        else showErrorNotification("Could not save state: " .. tostring(err)) end
         return
     end
 end
@@ -1269,12 +1271,13 @@ function M.wheelmoved(x, y) return inputHandler.wheelmoved(x, y) end
 function M.quit()
     -- Force save IO mappings regardless of whether they've changed
     markMappingsChanged() -- Mark as changed to force save
-    saveIOState(true) -- Pass true to force a save
+    local saved, err = saveIOState(true) -- Pass true to force a save
 
     -- Clean up OSC client
     osc_client.cleanup()
 
-    print("Emulator state saved successfully before closing")
+    if saved then print("Emulator state saved successfully before closing")
+    else print("Emulator state was NOT saved: " .. tostring(err)) end
 end
 
 -- Accessor for debug mode
@@ -1282,37 +1285,20 @@ function M.isDebugMode() return uiState.isDebugMode() end
 
 -- Public function to load a script from a path
 function M.loadScriptFromPath(filePath)
-    if not filePath then return end
+    if type(filePath) ~= "string" or filePath == "" then return false end
 
     print("Loading script from path:", filePath)
 
     -- Save window position before making any changes
     local windowX, windowY = love.window.getPosition()
 
-    -- Update scriptPath and load the script
-    scriptPath = filePath
-    scriptManager.setScriptPath(filePath)
-
-    -- Update state.json with the script path
-    local state = {}
-    local stateFile = io.open("state.json", "r")
-    if stateFile then
-        local content = stateFile:read("*a")
-        stateFile:close()
-        local success, result = pcall(json.decode, content)
-        if success then state = result end
-    end
-    state.scriptPath = scriptPath
-    local stateFile = io.open("state.json", "w")
-    if stateFile then
-        stateFile:write(json.encode(state, {indent = true}))
-        stateFile:close()
-    end
-
-    -- Load the new script
-    local newScript, newScriptParameters = loadScript(scriptPath)
+    -- Commit the path only after a successful load. The loader persists it then.
+    local previousPath = scriptPath
+    local newScript, newScriptParameters = loadScript(filePath)
 
     if newScript then
+        scriptPath = filePath
+        scriptManager.setScriptPath(filePath)
         -- Store previous I/O connections
         local prevInputAssignments = scriptInputAssignments
         local prevOutputAssignments = scriptOutputAssignments
@@ -1353,11 +1339,14 @@ function M.loadScriptFromPath(filePath)
         love.window.setPosition(windowX, windowY)
 
         -- Show notification
-        showNotification("Script loaded: " .. filePath:match("([^/]+)%.lua$"))
+        showNotification("Script loaded: " .. (filePath:match("([^/]+)$") or filePath))
 
         return true
     else
         -- Show error notification
+        scriptLoader.init({showNotification = showNotification,
+            showErrorNotification = showErrorNotification, scriptPath = previousPath,
+            midiHandler = midiHandler})
         showErrorNotification("Failed to load script: " .. filePath)
         return false
     end
@@ -1636,7 +1625,9 @@ function M.saveMidiSettings()
     for _, route in ipairs(midiHandler.getDestinationRoutes()) do
         cfg.midi.destinationRoutes[tostring(route.mask)] = route.forward
     end
-    config.save(cfg)
+    local saved, err = config.save(cfg)
+    if not saved then showErrorNotification("Could not save MIDI settings: " .. tostring(err)) end
+    return saved, err
 end
 
 -- Get MIDI handler for external access

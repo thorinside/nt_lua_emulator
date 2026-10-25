@@ -14,7 +14,7 @@ local mappingsChanged = false
 -- Save current IO mappings to state.json
 function M.saveIOState(state, forceWrite)
     -- Only save if mappings have changed or if forcing a write
-    if not mappingsChanged and not forceWrite then return end
+    if not mappingsChanged and not forceWrite then return true end
 
     -- Get current window position and size (with safe checks)
     local wx, wy, ww, wh = 0, 0, 768, 600
@@ -22,27 +22,55 @@ function M.saveIOState(state, forceWrite)
         if love.window.getPosition then
             wx, wy = love.window.getPosition()
         end
-        if love.window.getWidth and love.window.getHeight then
-            ww, wh = love.window.getWidth(), love.window.getHeight()
-        end
+        if love.window.getMode then ww, wh = love.window.getMode() end
     end
 
     -- Add window position and dimensions to state
     state.window = {x = wx, y = wy, width = ww, height = wh}
 
-    -- Convert to JSON
-    local jsonData = json.encode(state, {indent = true})
-
-    -- Save to file
-    local file = io.open(stateFile, "w")
-    if file then
-        file:write(jsonData)
-        file:close()
+    local success, err = M.saveStateFile(state)
+    if success then
         print("IO mappings saved to " .. stateFile)
         mappingsChanged = false
     else
-        print("Error: Could not save IO mappings to " .. stateFile)
+        -- Keep dirty state so a later save can retry.
+        mappingsChanged = true
+        print("Error: Could not save IO mappings: " .. tostring(err))
     end
+    return success, err
+end
+
+local function finite(n) return type(n) == "number" and n == n and math.abs(n) < math.huge end
+local function index(n, max) return finite(n) and n % 1 == 0 and n >= 1 and n <= max end
+local function sanitize(state)
+    for _, key in ipairs({"inputs", "outputs", "parameterAutomation", "inputModes", "parameterValues", "window"}) do
+        if type(state[key]) ~= "table" then state[key] = nil end
+    end
+    for key, max in pairs({inputs = 12, outputs = 8, parameterAutomation = 12}) do
+        for k, value in pairs(state[key] or {}) do
+            if not index(tonumber(k), 65536) or not index(value, max) then state[key][k] = nil end
+        end
+    end
+    for k, mode in pairs(state.inputModes or {}) do
+        if not index(tonumber(k), 12) or type(mode) ~= "table" then state.inputModes[k] = nil
+        else
+            if type(mode.clock) ~= "boolean" then mode.clock = nil end
+            if not finite(mode.polarity) then mode.polarity = nil end
+            if not finite(mode.scaling) then mode.scaling = nil end
+        end
+    end
+    for k, value in pairs(state.parameterValues or {}) do
+        if not finite(value) then state.parameterValues[k] = nil end
+    end
+    if not finite(state.clockBPM) or state.clockBPM <= 0 then state.clockBPM = nil end
+    for _, key in ipairs({"minimalMode", "oscEnabled"}) do
+        if type(state[key]) ~= "boolean" then state[key] = nil end
+    end
+    local w = state.window
+    if w and (not finite(w.x) or not finite(w.y) or not index(w.width, 16384) or not index(w.height, 16384)) then
+        state.window = nil
+    end
+    return state
 end
 
 -- Load IO mappings from state.json
@@ -59,8 +87,8 @@ function M.loadIOState(scriptPath)
     file:close()
 
     -- Parse JSON
-    local state = json.decode(content)
-    if not state then
+    local success, state = pcall(json.decode, content)
+    if not success or type(state) ~= "table" then
         print("Error parsing state file")
         return false, nil
     end
@@ -70,7 +98,7 @@ function M.loadIOState(scriptPath)
         print("State is for a different script")
     end
 
-    return true, state
+    return true, sanitize(state)
 end
 
 -- Create default mappings (first n inputs, first m outputs)
@@ -115,23 +143,14 @@ function M.loadStateFile()
     file:close()
 
     local success, state = pcall(json.decode, content)
-    if not success then return {} end
+    if not success or type(state) ~= "table" then return {} end
 
     return state
 end
 
 -- Save state file with given state object
 function M.saveStateFile(state)
-    local jsonData = json.encode(state, {indent = true})
-
-    local file = io.open(stateFile, "w")
-    if file then
-        file:write(jsonData)
-        file:close()
-        return true
-    end
-
-    return false
+    return require("modules.json_store").save(stateFile, state)
 end
 
 -- Export the module

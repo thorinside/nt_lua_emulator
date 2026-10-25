@@ -152,14 +152,18 @@ equal(closedOutputs, 1)
 -- Redirect only config.json to a temporary file; never touch the user's config.
 local config = require("modules.config")
 local temporary = os.tmpname()
-local originalOpen = io.open
-io.open = function(path, mode)
-    return originalOpen(path == "config.json" and temporary or path, mode)
+local originalOpen, originalRename = io.open, os.rename
+local function redirect(path)
+    if path == "config.json" then return temporary end
+    if path == "config.json.tmp" then return temporary .. ".tmp" end
+    return path
 end
+io.open = function(path, mode) return originalOpen(redirect(path), mode) end
+os.rename = function(from, to) return originalRename(redirect(from), redirect(to)) end
 assert(config.save({midi = {enabled = true, selectedInput = -1, selectedOutput = 2,
                           destinationRoutes = {["1"] = false, ["8"] = true}}}))
 local saved = config.load()
-io.open = originalOpen
+io.open, os.rename = originalOpen, originalRename
 os.remove(temporary)
 equal(saved.midi.selectedOutput, 2)
 equal(saved.midi.destinationRoutes["1"], false)

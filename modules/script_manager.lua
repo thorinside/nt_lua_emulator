@@ -1,6 +1,7 @@
 -- script_manager.lua
 -- Module for managing script execution, callbacks, and control interactions
 local M = {} -- Module table
+local scriptGuard = require("modules.script_guard")
 
 -- Local state variables
 local script = nil
@@ -80,8 +81,9 @@ function M.hasControlCallbacks(scriptObj)
 end
 
 local function callControlCallback(scriptObj, callback, ...)
+    if scriptGuard.isDisabled(callback) then return nil end
     if scriptObj.isUiScript then
-        local success, result = pcall(callback, ...)
+        local success, result = scriptGuard.call(callback, ...)
         if not success and M.notifications and
             M.notifications.showErrorNotification then
             M.notifications.showErrorNotification("Script error: " ..

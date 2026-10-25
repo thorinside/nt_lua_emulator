@@ -129,94 +129,53 @@ function helpers.getOutputName(script, i)
     end
 end
 
--- Helper function to wrap and ellipsize text
+-- Fit text without byte-splitting UTF-8 or unbounded trimming loops.
+local function boundaries(text)
+    local ends = {0}
+    for i = 2, #text do
+        local byte = text:byte(i)
+        if byte < 128 or byte >= 192 then ends[#ends + 1] = i - 1 end
+    end
+    if #text > 0 then ends[#ends + 1] = #text end
+    return ends
+end
+local function fit(text, font, width, suffix)
+    local ends = boundaries(text)
+    if font:getWidth(suffix) > width then suffix = "" end
+    local low, high = 1, #ends
+    while low < high do
+        local mid = math.ceil((low + high) / 2)
+        if font:getWidth(text:sub(1, ends[mid]) .. suffix) <= width then low = mid
+        else high = mid - 1 end
+    end
+    return text:sub(1, ends[low]) .. suffix
+end
 function helpers.wrapAndEllipsizeText(text, font, maxWidth, maxLines)
-    -- If the entire text fits in one line, just return it
+    if maxWidth <= 0 or maxLines < 1 then return {} end
+    text = tostring(text or "")
     if font:getWidth(text) <= maxWidth then return {text} end
-
-    local words = {}
-    for word in text:gmatch("%S+") do table.insert(words, word) end
-
-    local lines = {}
-    local currentLine = ""
-    local currentWidth = 0
-
+    local words, lines = {}, {}
+    for word in text:gmatch("%S+") do words[#words + 1] = word end
+    local current = ""
     for i, word in ipairs(words) do
-        local wordWidth = font:getWidth(word)
-        local spaceWidth = font:getWidth(" ")
-
-        -- Handle very long words that exceed maxWidth on their own
-        if wordWidth > maxWidth then
-            -- If we have something in the current line, add it first
-            if currentLine ~= "" then
-                table.insert(lines, currentLine)
-                if #lines >= maxLines then
-                    -- Ellipsize the last line if needed
-                    local lastLine = lines[#lines]
-                    while font:getWidth(lastLine .. "...") > maxWidth do
-                        lastLine = lastLine:sub(1, -2)
-                    end
-                    lines[#lines] = lastLine .. "..."
-                    return lines
-                end
-                currentLine = ""
-                currentWidth = 0
+        local candidate = current == "" and word or current .. " " .. word
+        if font:getWidth(candidate) <= maxWidth then
+            current = candidate
+        elseif current ~= "" then
+            if #lines + 1 >= maxLines then
+                lines[#lines + 1] = fit(current, font, maxWidth, "...")
+                return lines
             end
-
-            -- Handle the long word by truncating it
-            local truncatedWord = word
-            while font:getWidth(truncatedWord) > maxWidth do
-                truncatedWord = truncatedWord:sub(1, -2)
-            end
-            truncatedWord = truncatedWord .. "..."
-
-            table.insert(lines, truncatedWord)
+            lines[#lines + 1] = current
+            current = word
+        else current = word end
+        if font:getWidth(current) > maxWidth then
+            lines[#lines + 1] = fit(current, font, maxWidth, "...")
+            current = ""
             if #lines >= maxLines then return lines end
-        else
-            -- Normal word that fits within maxWidth
-            if currentLine == "" then
-                -- First word on the line
-                currentLine = word
-                currentWidth = wordWidth
-            else
-                -- Check if adding this word would exceed maxWidth
-                if currentWidth + spaceWidth + wordWidth <= maxWidth then
-                    currentLine = currentLine .. " " .. word
-                    currentWidth = currentWidth + spaceWidth + wordWidth
-                else
-                    -- Start a new line
-                    table.insert(lines, currentLine)
-                    if #lines >= maxLines then
-                        -- If we've reached max lines, ellipsize the last line
-                        local lastLine = lines[#lines]
-                        while font:getWidth(lastLine .. "...") > maxWidth do
-                            lastLine = lastLine:sub(1, -2)
-                        end
-                        lines[#lines] = lastLine .. "..."
-                        return lines
-                    end
-                    currentLine = word
-                    currentWidth = wordWidth
-                end
-            end
         end
     end
-
-    -- Add the last line if there is one
-    if currentLine ~= "" then
-        table.insert(lines, currentLine)
-        if #lines > maxLines then
-            -- If we've exceeded max lines, ellipsize the last line
-            local lastLine = lines[maxLines]
-            while font:getWidth(lastLine .. "...") > maxWidth do
-                lastLine = lastLine:sub(1, -2)
-            end
-            lines[maxLines] = lastLine .. "..."
-            -- Remove any extra lines
-            for i = maxLines + 1, #lines do lines[i] = nil end
-        end
-    end
-
+    if current ~= "" then lines[#lines + 1] = current end
     return lines
 end
 

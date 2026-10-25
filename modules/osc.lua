@@ -32,6 +32,7 @@ function osc.new(host, port)
     -- Connect to the specified host and port
     local success, err = client.udp:setpeername(client.host, client.port)
     if not success then
+        client.udp:close()
         error("Failed to connect to OSC server: " .. tostring(err))
     end
 
@@ -275,10 +276,13 @@ function osc.new(host, port)
     -- Setup OSC server to receive messages
     function client.create_server(receive_port, callback)
         local server = {}
-        server.udp = socket.udp()
+        local socketError
+        server.udp, socketError = socket.udp()
+        if not server.udp then error("Failed to create OSC socket: " .. tostring(socketError)) end
 
         local success, err = server.udp:setsockname("*", receive_port)
         if not success then
+            server.udp:close()
             error("Failed to create OSC server: " .. tostring(err))
         end
 
@@ -286,6 +290,9 @@ function osc.new(host, port)
 
         -- Utility function to extract null-terminated string
         function server.extract_string(data, pos)
+            if type(data) ~= "string" or type(pos) ~= "number" or pos < 1 or pos % 1 ~= 0 then
+                return nil, "Invalid string position"
+            end
             local end_pos = data:find("\0", pos)
             if not end_pos then
                 return nil, "String not null-terminated"
@@ -294,15 +301,23 @@ function osc.new(host, port)
             local str = data:sub(pos, end_pos - 1)
             -- Calculate position after padding
             local next_pos = pos + math.ceil((end_pos - pos + 1) / 4) * 4
+            if next_pos - 1 > #data or data:sub(end_pos, next_pos - 1):find("[^%z]") then
+                return nil, "Invalid string padding"
+            end
             return str, next_pos
         end
 
         -- Function to parse OSC messages
-        function server.parse_message(data)
+        function server.parse_message(data, depth)
+            depth = depth or 0
+            if type(data) ~= "string" or #data == 0 or #data > 65507 or #data % 4 ~= 0 then
+                return nil, "Invalid OSC packet length"
+            end
+            if depth > 16 then return nil, "OSC bundle nesting limit exceeded" end
             -- Check if it's a bundle
             if data:sub(1, 8) == "#bundle\0" then
                 -- Parse bundle
-                return server.parse_bundle(data)
+                return server.parse_bundle(data, depth)
             end
 
             -- Extract address pattern
@@ -310,6 +325,7 @@ function osc.new(host, port)
             if not address then
                 return nil, "Invalid OSC message: " .. tostring(pos)
             end
+            if address:sub(1, 1) ~= "/" then return nil, "Invalid OSC address" end
 
             -- Extract type tag
             local type_tag, pos = server.extract_string(data, pos)
@@ -407,11 +423,17 @@ function osc.new(host, port)
                 end
             end
 
+            if pos ~= #data + 1 then return nil, "Unexpected trailing OSC data" end
             return address, args
         end
 
         -- Function to parse OSC bundles
-        function server.parse_bundle(data)
+        function server.parse_bundle(data, depth)
+            depth = depth or 0
+            if depth > 16 then return nil, "OSC bundle nesting limit exceeded" end
+            if type(data) ~= "string" or #data < 16 or #data > 65507 or #data % 4 ~= 0 then
+                return nil, "Invalid OSC bundle length"
+            end
             -- Check bundle header
             if data:sub(1, 8) ~= "#bundle\0" then
                 return nil, "Not an OSC bundle"
@@ -434,6 +456,7 @@ function osc.new(host, port)
                                  b4
                 pos = pos + 4
 
+                if size == 0 or size % 4 ~= 0 then return nil, "Invalid bundle element size" end
                 -- Read element data
                 if pos + size - 1 > #data then
                     return nil, "Bundle too short for element data"
@@ -441,14 +464,11 @@ function osc.new(host, port)
 
                 local element_data = data:sub(pos, pos + size - 1)
                 local element_address, element_args =
-                    server.parse_message(element_data)
+                    server.parse_message(element_data, depth + 1)
 
-                if element_address then
-                    table.insert(elements, {
-                        address = element_address,
-                        args = element_args
-                    })
-                end
+                -- Reject the entire malformed bundle; never dispatch a partial packet.
+                if not element_address then return nil, element_args end
+                table.insert(elements, {address = element_address, args = element_args})
 
                 pos = pos + size
             end
@@ -463,15 +483,13 @@ function osc.new(host, port)
                 local address, args = server.parse_message(data)
 
                 if address and callback then
-                    if address == "#bundle" then
-                        -- Handle bundle
-                        for _, element in ipairs(args) do
-                            callback(element.address, element.args, ip, port)
-                        end
-                    else
-                        -- Handle single message
-                        callback(address, args, ip, port)
+                    local function dispatch(name, values)
+                        if name == "#bundle" then
+                            for _, element in ipairs(values) do dispatch(element.address, element.args) end
+                        else callback(name, values, ip, port) end
                     end
+                    local ok, callbackError = pcall(dispatch, address, args)
+                    if not ok then return nil, "OSC callback failed: " .. tostring(callbackError) end
                 end
 
                 return address, args
