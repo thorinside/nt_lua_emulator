@@ -10,17 +10,21 @@ function M.create(send, getTime)
         {mask = 4, name = "USB", forward = true, count = 0},
         {mask = 8, name = "Internal", forward = false, count = 0}
     }
-    local history, sequence = {}, 0
+    local capacity = 128
+    local history, head, size = {}, 1, 0
+    local sequence, revision = 0, 0
     local function copyBytes(bytes)
         local result = {}
         for i, byte in ipairs(bytes) do result[i] = byte end
         return result
     end
     local function record(mask, bytes, delivery, reason)
-        sequence = sequence + 1
-        history[#history + 1] = {id = sequence, time = getTime(), destinations = mask,
+        sequence, revision = sequence + 1, revision + 1
+        local index = (head + size - 1) % capacity + 1
+        history[index] = {id = sequence, time = getTime(), destinations = mask,
             bytes = copyBytes(bytes), delivery = delivery, reason = reason, forwarded = delivery == "sent"}
-        if #history > 128 then table.remove(history, 1) end
+        if size < capacity then size = size + 1
+        else head = head % capacity + 1 end
     end
     local router = {}
     function router.send(mask, ...)
@@ -79,17 +83,24 @@ function M.create(send, getTime)
         end
         return result
     end
-    function router.getHistory()
+    -- Return only the newest requested rows, still ordered oldest to newest.
+    -- Snapshots never expose the ring buffer or its mutable byte tables.
+    function router.getHistory(limit)
+        local count = math.max(0, math.min(size, math.floor(limit or size)))
         local result = {}
-        for i, event in ipairs(history) do
+        for i = 1, count do
+            local event = history[(head + size - count + i - 2) % capacity + 1]
             result[i] = {id = event.id, time = event.time, destinations = event.destinations,
                 bytes = copyBytes(event.bytes), delivery = event.delivery, reason = event.reason,
                 forwarded = event.forwarded}
         end
         return result
     end
+    -- Allocation-free change detection for the monitor, including after clear.
+    function router.getHistoryState() return revision, sequence end
     function router.clear()
-        history, sequence = {}, 0
+        history, head, size, sequence = {}, 1, 0, 0
+        revision = revision + 1
         for _, destination in ipairs(destinations) do destination.count, destination.last = 0, nil end
     end
     return router

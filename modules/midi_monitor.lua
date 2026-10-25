@@ -6,6 +6,7 @@ local frozen, scroll = nil, 0
 local x, y, width, height
 local dragX, dragY
 local font
+local cachedEvents, cachedRevision, cachedLimit = {}, nil, nil
 local names = {{1, "Breakout", "B"}, {2, "Select Bus", "S"}, {4, "USB", "U"}, {8, "Internal", "I"}}
 local noteNames = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 
@@ -69,6 +70,7 @@ function M.init(deps)
     handler = assert(deps.midiHandler)
     visible, paused, dragging, frozen, scroll = false, false, false, nil, 0
     x, y, font = nil, nil, nil
+    cachedEvents, cachedRevision, cachedLimit = {}, nil, nil
 end
 local function layout()
     local sw, sh = love.graphics.getWidth(), love.graphics.getHeight()
@@ -76,8 +78,14 @@ local function layout()
     x = math.max(8, math.min(x or (sw - width - 8), sw - width - 8))
     y = math.max(8, math.min(y or (sh - height - 8), sh - height - 8))
 end
-local function history()
-    return paused and frozen or handler.getOutputHistory()
+local function history(limit)
+    if paused then return frozen end
+    local revision = handler.getOutputHistoryState()
+    if revision ~= cachedRevision or limit ~= cachedLimit then
+        cachedEvents = handler.getOutputHistory(limit)
+        cachedRevision, cachedLimit = revision, limit
+    end
+    return cachedEvents
 end
 local function inside(px, py)
     layout()
@@ -100,6 +108,7 @@ function M.setPaused(value)
 end
 function M.clear()
     handler.clearOutputHistory()
+    cachedEvents, cachedRevision, cachedLimit = {}, nil, nil
     frozen, scroll = paused and {} or nil, 0
 end
 function M.getBounds()
@@ -112,8 +121,7 @@ function M.draw()
     love.graphics.push("all")
     love.graphics.setFont(font)
     if not visible then
-        local events = handler.getOutputHistory()
-        local count = #events > 0 and events[#events].id or 0
+        local _, count = handler.getOutputHistoryState()
         love.graphics.setColor(0.6, 0.85, 0.9, 1)
         love.graphics.print("MIDI out: " .. count .. " calls | F5 log", love.graphics.getWidth() - 250,
                             love.graphics.getHeight() - 20)
@@ -133,20 +141,19 @@ function M.draw()
     local port = handler.getCurrentOutputPortIndex()
     local portText = port < 0 and "No host output selected; capture is active" or "Host output port " .. (port + 1)
     love.graphics.print(paused and "View paused; script and capture still running" or portText, x + 10, y + 30)
-    local events = history()
     local rows = math.max(1, math.floor((height - 98) / 20))
+    local events = history(rows)
     scroll = math.max(0, math.min(scroll, math.max(0, #events - rows)))
     local usable = width - 20
     local edges = {0, 0.115, 0.25, 0.52, 0.66, 1}
     local headers = {"Time", "Destination", "Message", "Bytes", "Result"}
     local function cell(text, column, top)
         local left = x + 10 + math.floor(usable * edges[column])
-        local cellWidth = math.floor(usable * (edges[column + 1] - edges[column])) - 6
-        local fitted = text
-        while #fitted > 0 and font:getWidth(fitted) > cellWidth do fitted = fitted:sub(1, -2) end
-        if fitted ~= text and #fitted > 3 then fitted = fitted:sub(1, -4) .. "..." end
-        love.graphics.setScissor(left, top, math.max(1, cellWidth), 19)
-        love.graphics.print(fitted, left, top)
+        local cellWidth = math.max(1, math.floor(usable * (edges[column + 1] - edges[column])) - 6)
+        -- Clip on the GPU instead of repeatedly measuring shorter strings.
+        -- Full text remains available in the hover details.
+        love.graphics.setScissor(left, top, cellWidth, 19)
+        love.graphics.print(text, left, top)
     end
     love.graphics.setColor(0.16, 0.2, 0.24, 1)
     love.graphics.rectangle("fill", x + 8, y + 50, width - 16, 20)
@@ -165,7 +172,9 @@ function M.draw()
     for row = 1, rows do
         local event = events[#events - scroll - row + 1]
         if not event then break end
-        local entry = M.formatEvent(event)
+        -- These are monitor-owned snapshots, not the router's live records.
+        local entry = event.formatted or M.formatEvent(event)
+        event.formatted = entry
         local lineY = y + 72 + (row - 1) * 20
         local warning = event.delivery == "invalid" or event.delivery == "ignored" or event.delivery == "unavailable"
         love.graphics.setScissor(x + 8, lineY, width - 16, 20)

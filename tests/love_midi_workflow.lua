@@ -27,6 +27,12 @@ local monitor = require("modules.midi_monitor")
 local chooser = require("modules.midi_output_dialog")
 local controls = require("modules.controls")
 local handler = emulator.getMidiHandler()
+local snapshotReads, lastSnapshotLimit = 0, nil
+local originalHistory = handler.getOutputHistory
+handler.getOutputHistory = function(limit)
+    snapshotReads, lastSnapshotLimit = snapshotReads + 1, limit
+    return originalHistory(limit)
+end
 local notifications = require("modules.notifications")
 local originalError, originalPrint = notifications.showErrorNotification, love.graphics.print
 local errors, rendered, frames, echoCount = 0, {}, 0, 0
@@ -145,6 +151,16 @@ local steps = {
         assert(monitor.isPaused(), "scroll pauses only the view")
     end,
     [39] = function() header(160); assert(not monitor.isPaused()) end,
+    [40] = function()
+        for i = 1, 10000 do handler.sendToDestinations(8, 0xB0, 7, i % 128) end
+        equal(#history(), 128, "heavy capture stays bounded with the log open")
+        equal(last().bytes[3], 16, "newest event survives buffer wraparound")
+    end,
+    [41] = function()
+        key("f5"); assert(not monitor.isVisible())
+        for i = 1, 10000 do handler.sendToDestinations(8, 0xB0, 7, i % 128) end
+        equal(#history(), 128, "heavy capture stays bounded with the log closed")
+    end,
     [42] = function()
         equal(errors, 0, "no script/renderer errors")
         print("LOVE_MIDI_WORKFLOW_PASSED", fakeNative and "fake-native" or "no-native")
@@ -164,8 +180,17 @@ function love.update()
     appUpdate(0.025)
 end
 function love.draw()
+    local before = snapshotReads
     rendered = {}; appDraw()
+    if not monitor.isVisible() or monitor.isPaused() then
+        equal(snapshotReads, before, "hidden/paused draw must not copy live history")
+    elseif snapshotReads > before then
+        equal(snapshotReads, before + 1, "at most one snapshot per draw")
+        local rows = math.max(1, math.floor((monitor.getBounds().height - 98) / 20))
+        equal(lastSnapshotLimit, rows, "only visible rows are copied")
+    end
     local text = table.concat(rendered, "\n")
+    if frames == 40 then assert(text:find("CC ch1 7 16", 1, true), text) end
     if frames == 9 then assert(text:find("CC ch1", 1, true), text) end
     if frames == 12 then assert(text:find("View paused; script and capture still running", 1, true), text) end
     if frames == 18 then

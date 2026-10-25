@@ -290,6 +290,7 @@ M.sendToDestinations = router.send
 M.getDestinationRoutes = router.getRoutes
 M.setDestinationRoute = router.setRoute
 M.getOutputHistory = router.getHistory
+M.getOutputHistoryState = router.getHistoryState
 M.clearOutputHistory = router.clear
 
 return M

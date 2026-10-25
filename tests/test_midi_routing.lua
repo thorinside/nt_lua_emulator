@@ -40,8 +40,20 @@ local routes = router.getRoutes()
 routes[1].last[1] = 0
 equal(router.getHistory()[1].bytes[1], 0x90)
 equal(router.getRoutes()[1].last[1], 0x90)
+local _, beforeSequence = router.getHistoryState()
 for i = 1, 200 do router.send(8, 0xF8) end
-equal(#router.getHistory(), 128)
+history = router.getHistory()
+equal(#history, 128)
+equal(history[1].id, beforeSequence + 73)
+equal(history[128].id, beforeSequence + 200)
+local recent = router.getHistory(3)
+equal(#recent, 3)
+equal(recent[1].id, beforeSequence + 198)
+equal(recent[3].id, history[128].id)
+equal(#router.getHistory(0), 0)
+equal(#router.getHistory(500), 128)
+recent[3].bytes[1] = 0
+equal(router.getHistory(1)[1].bytes[1], 0xF8)
 
 -- Firmware API routes and records messages even when native MIDI is absent.
 local handler = {
@@ -65,7 +77,11 @@ equal(rejected[#rejected].delivery, "invalid")
 api.sendMIDI(1, nil, 64)
 rejected = router.getHistory()
 equal(rejected[#rejected].delivery, "invalid")
+local beforeClear = router.getHistoryState()
 router.clear()
+local afterClear, clearedSequence = router.getHistoryState()
+assert(afterClear > beforeClear, "clear must invalidate snapshots even when IDs restart")
+equal(clearedSequence, 0)
 equal(#router.getHistory(), 0)
 equal(router.getRoutes()[1].count, 0)
 equal(router.getRoutes()[1].last, nil)
