@@ -32,31 +32,31 @@ local api, runtime = ntApi.create({
 })
 
 -- Standard pots select page, select within page, then adjust directionally.
-equal(api.getCurrentParameter(0), 2)
+equal(api.getCurrentParameter(1), 2)
 api.standardPot1Turn(1)
-equal(api.getCurrentParameter(0), 14, "last page, clamped within page")
+equal(api.getCurrentParameter(1), 14, "last page, clamped within page")
 api.standardPot2Turn(0)
-equal(api.getCurrentParameter(0), 13)
+equal(api.getCurrentParameter(1), 13)
 api.standardPot2Turn(1)
-equal(api.getCurrentParameter(0), 14)
+equal(api.getCurrentParameter(1), 14)
 api.standardPot1Turn(0)
 api.standardPot2Turn(0.2)
-equal(api.getCurrentParameter(0), 2)
+equal(api.getCurrentParameter(1), 2)
 api.standardPot3Turn(0.2) -- Anchor without a jump.
-near(api.getParameter(0, 2), 5)
+near(api.getParameter(1, 2), 5)
 api.standardPot3Turn(0.3)
-near(api.getParameter(0, 2), 6)
+near(api.getParameter(1, 2), 6)
 api.standardPot3Turn(0.1)
-near(api.getParameter(0, 2), 4)
-api.focusParameter(0, 3)
+near(api.getParameter(1, 2), 4)
+api.focusParameter(1, 3)
 for i = 1, 30 do api.standardPot3Turn(0.1 + i / 100) end
-equal(api.getParameter(0, 3), 2, "small enum movements accumulate")
+equal(api.getParameter(1, 3), 2, "small enum movements accumulate")
 api.standardPot3Turn(0 / 0)
-equal(api.getParameter(0, 3), 2)
-api.focusParameter(0, 999)
-equal(api.getCurrentParameter(0), 3, "invalid focus ignored")
-api.setParameter(0, 2, 0 / 0)
-near(api.getParameter(0, 2), 4)
+equal(api.getParameter(1, 3), 2)
+api.focusParameter(1, 999)
+equal(api.getCurrentParameter(1), 3, "invalid focus ignored")
+api.setParameter(1, 2, 0 / 0)
+near(api.getParameter(1, 2), 4)
 
 -- Bus numbers identify physical buses, NOT script slots. Remapping an output
 -- moves its voltage to the corresponding physical output bus.
@@ -117,13 +117,13 @@ api.setDisplayMode("invalid")
 equal(runtime.drawDisplayMode(), true)
 api.setDisplayMode("ui")
 equal(runtime.drawDisplayMode(), false)
-api.focusParameter(0, 3)
+api.focusParameter(1, 3)
 drawn = {}
-api.drawParameterLine(0, 3, 0)
+api.drawParameterLine(1, 3, 0)
 equal(drawn[1], "Mode: On", "enum label rather than integer")
-api.focusParameter(1, api.findParameter(1, "Decay"))
+api.focusParameter(2, api.findParameter(2, "Decay"))
 drawn = {}
-api.drawAlgorithmUI(1)
+api.drawAlgorithmUI(2)
 assert(table.concat(drawn, "\n"):find("Decay: 2.5 s", 1, true))
 
 -- Script manager renders built-in modes without calling the user's draw.
@@ -149,7 +149,7 @@ manager.controls = {setCallbacks = function(value) callbacks = value end}
 manager.setupControlCallbacks(script)
 api.setDisplayMode("overview")
 callbacks.onPotChange(1, 1)
-equal(api.getCurrentAlgorithm(), #preset - 1)
+equal(api.getCurrentAlgorithm(), #preset)
 equal(customPotCalls, 0)
 api.setDisplayMode("ui")
 callbacks.onPotChange(1, 0)
@@ -159,6 +159,25 @@ local fallbackCalls = 0
 _G.standardPot1Turn = function() fallbackCalls = fallbackCalls + 1 end
 callbacks.onPotChange(1, 0)
 equal(fallbackCalls, 1)
+
+-- Preset size is data-driven, duplicate discovery returns one-based indices,
+-- and the overview follows a selected entry beyond the first screen.
+preset[6] = {name = "Reverb", params = {simulated.bypass()}}
+equal(api.getAlgorithmCount(), 6)
+local reverb1, reverb2 = api.findAlgorithm("Reverb")
+equal(reverb1, 2)
+equal(reverb2, 6)
+api.setParameter(6, 1, 1)
+equal(api.getParameter(6, 1), 1)
+assert(not script._emulatorBypassed, "fixture bypass must not bypass the script")
+api.setDisplayMode("overview")
+runtime.handlePot(1, 1)
+equal(api.getCurrentAlgorithm(), 6)
+drawn = {}
+runtime.drawDisplayMode()
+equal(drawn[2], "> Reverb", "sixth algorithm visible in overview")
+preset[6] = nil
+api.focusParameter(1, 2)
 
 -- A gate callback sees the updated voltage at its physical bus immediately.
 processor.init({scriptManager = {callScriptGate = function()

@@ -71,7 +71,7 @@ function test.process(inputs, outputs)
     testSignals.time = time
     
     -- Use new API features during processing
-    local algIndex = self.algorithmIndex or 0
+    local algIndex = self.algorithmIndex or 1
     local algCount = getAlgorithmCount() or 1
     
     -- Generate complex test signals
@@ -160,7 +160,7 @@ local function testSignalProcessing()
         for i = 1, 4 do
             local signal = signalGenerators.sine(time, 1 + i)
             -- Use API during signal processing
-            local algIndex = self.algorithmIndex or 0
+            local algIndex = self.algorithmIndex or 1
             signal = signal * (1 + algIndex * 0.01)
         end
         return true
@@ -216,7 +216,7 @@ local function testParameterAutomation()
             for i = 1, math.min(#self.parameters, 3) do
                 local param = self.parameters[i]
                 -- Use parameter with new API features
-                local algIndex = self.algorithmIndex or 0
+                local algIndex = self.algorithmIndex or 1
                 local modulated = param * (1 + algIndex * 0.01)
             end
         end
@@ -268,7 +268,7 @@ local function testStatePersistence()
     local success = pcall(function()
         -- Create state with API-related data
         local testState = {
-            currentAlgorithm = self.algorithmIndex or 0,
+            currentAlgorithm = self.algorithmIndex or 1,
             timestamp = love.timer.getTime(),
             apiVersion = "1.10.0",
             testSignals = testSignals
@@ -327,10 +327,10 @@ local function testControlInterface()
     local success = pcall(function()
         -- Simulate control callbacks
         local algCount = getAlgorithmCount() or 1
-        local algIndex = self.algorithmIndex or 0
+        local algIndex = self.algorithmIndex or 1
         
         -- Display control info with alignment
-        drawText(10, 45, "Alg: " .. algIndex .. "/" .. (algCount - 1), 8, "left")
+        drawText(10, 45, "Alg: " .. algIndex .. "/" .. algCount, 8, "left")
         drawText(128, 45, "Control Test", 8, "centre")
         drawText(246, 45, "OK", 8, "right")
         
@@ -385,7 +385,7 @@ local function testDisplaySystem()
     local success = pcall(function()
         -- Complex display with API info
         local algCount = getAlgorithmCount() or 0
-        local algIndex = self.algorithmIndex or 0
+        local algIndex = self.algorithmIndex or 1
         
         -- Header with algorithm info
         drawText(128, 5, "API 1.10.0 Integration", 15, "centre")
@@ -424,7 +424,7 @@ local function testMIDIIntegration()
     result.totalTests = result.totalTests + 1
     local success = pcall(function()
         -- Simulate MIDI processing with API features
-        local algIndex = self.algorithmIndex or 0
+        local algIndex = self.algorithmIndex or 1
         local midiNote = 60 + algIndex -- Use algorithm index to affect MIDI
         
         -- Test that API functions don't interfere with MIDI
@@ -463,7 +463,7 @@ local function testOSCIntegration()
         -- Simulate OSC message preparation
         local oscData = {
             path = "/disting/algorithm",
-            value = self.algorithmIndex or 0,
+            value = self.algorithmIndex or 1,
             timestamp = love.timer.getTime()
         }
         
@@ -547,11 +547,11 @@ local function testPerformanceLoad()
             local algCount = getAlgorithmCount()
             
             if algCount and algCount > 0 then
-                local algName = getAlgorithmName(0)
-                local paramCount = getParameterCount(0)
+                local algName = getAlgorithmName(1)
+                local paramCount = getParameterCount(1)
                 
                 if paramCount and paramCount > 0 then
-                    local paramName = getParameterName(0, 0)
+                    local paramName = getParameterName(1, 1)
                 end
             end
             

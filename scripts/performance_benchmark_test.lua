@@ -71,7 +71,7 @@ local function benchmarkAlgorithmProperty()
     for i = 1, iterations do
         local index = self.algorithmIndex
         -- Do something with the value to prevent optimization
-        if index and index >= 0 then
+        if index and index >= 1 then
             local dummy = index + 1
         end
     end
@@ -104,7 +104,7 @@ local function benchmarkAlgorithmQueries()
     for i = 1, iterations do
         local count = getAlgorithmCount()
         if count and count > 0 then
-            local name = getAlgorithmName(0)
+            local name = getAlgorithmName(1)
             -- Use the name to prevent optimization
             if name then
                 local len = string.len(name)
@@ -137,9 +137,9 @@ local function benchmarkParameterQueries()
     local startTime = love.timer.getTime()
     
     for i = 1, iterations do
-        local count = getParameterCount(0)
+        local count = getParameterCount(1)
         if count and count > 0 then
-            local name = getParameterName(0, 0)
+            local name = getParameterName(1, 1)
             -- Use the name to prevent optimization
             if name then
                 local len = string.len(name)
@@ -273,11 +273,11 @@ local function benchmarkMixedUsage()
         local algCount = getAlgorithmCount()
         
         if algCount and algCount > 0 then
-            local algName = getAlgorithmName(0)
-            local paramCount = getParameterCount(0)
+            local algName = getAlgorithmName(1)
+            local paramCount = getParameterCount(1)
             
             if paramCount and paramCount > 0 then
-                local paramName = getParameterName(0, 0)
+                local paramName = getParameterName(1, 1)
             end
         end
         
@@ -324,7 +324,7 @@ local function benchmarkMemoryAnalysis()
             drawText(100, 20, testString, 12, "centre")
             
             if algCount and algCount > 0 then
-                local algName = getAlgorithmName(0)
+                local algName = getAlgorithmName(1)
                 local combinedString = testString .. " " .. (algName or "")
             end
         end

@@ -592,6 +592,11 @@ function M.loadScript(scriptPath, createDefaultMappings)
                 print("ScriptLoader: No valid scriptState found.")
             end
 
+            -- The loaded script is preset entry 1, regardless of later UI focus.
+            -- Expose its identity/parameter offset during init as well as callbacks.
+            newScript.algorithmIndex = 1
+            newScript.parameterOffset = newScript.parameterOffset or 1
+
             -- Call script's init function
             if newScript.init then
                 local initResult = safeScriptCall(newScript.init, newScript) -- safeScriptCall handles pcall internally
@@ -622,13 +627,6 @@ function M.loadScript(scriptPath, createDefaultMappings)
                     error("UI script initialization failed: " .. initResult)
                 end
             end
-
-            -- Add required fields to the script object (parameterOffset can be set here)
-            newScript.parameterOffset = newScript.parameterOffset or 1 -- Use script-defined or default to 1
-            
-            -- Add algorithmIndex property for API 1.10.0 support
-            -- This provides the index of the algorithm in the preset
-            newScript.algorithmIndex = getCurrentAlgorithm() -- Use the current algorithm index
 
             -- Call setupUi if available
             if newScript.setupUi then

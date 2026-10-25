@@ -1,6 +1,6 @@
 -- Load with F2. Encoder 1 selects this script's parameter; pot 1 changes it.
 -- This exercises metadata, discovery, numeric scaling, enums, and writes.
-local algorithm = 0
+local algorithm = 1
 local selected = 1
 
 return {

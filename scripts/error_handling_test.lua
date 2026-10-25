@@ -153,7 +153,7 @@ local function testParameterQueryErrors()
     local algCount = getAlgorithmCount()
     if algCount and algCount > 0 then
         -- Test invalid algorithm indices for parameter functions
-        local invalidAlgIndices = {-1, -100, algCount, algCount + 1, algCount + 100}
+        local invalidAlgIndices = {-1, -100, 0, algCount + 1, algCount + 100}
         for _, algIndex in ipairs(invalidAlgIndices) do
             -- Test getParameterCount with invalid algorithm
             testsTotal = testsTotal + 1
@@ -175,17 +175,17 @@ local function testParameterQueryErrors()
         end
         
         -- Test with first valid algorithm
-        local paramCount = getParameterCount(0)
+        local paramCount = getParameterCount(1)
         if paramCount and paramCount > 0 then
             -- Test invalid parameter indices
-            local invalidParamIndices = {-1, -100, paramCount, paramCount + 1, paramCount + 100}
+            local invalidParamIndices = {-1, -100, 0, paramCount + 1, paramCount + 100}
             for _, paramIndex in ipairs(invalidParamIndices) do
                 testsTotal = testsTotal + 1
-                local success, name = pcall(getParameterName, 0, paramIndex)
+                local success, name = pcall(getParameterName, 1, paramIndex)
                 if success and name == nil then
                     testsPassed = testsPassed + 1
                 else
-                    table.insert(result.errors, "getParameterName(0," .. paramIndex .. ") should return nil")
+                    table.insert(result.errors, "getParameterName(1," .. paramIndex .. ") should return nil")
                 end
             end
         end
@@ -424,9 +424,9 @@ local function testMemorySafetyTests()
     for i = 1, 100 do
         local count = getAlgorithmCount()
         if count and count > 0 then
-            getAlgorithmName(0)
-            getParameterCount(0)
-            getParameterName(0, 0)
+            getAlgorithmName(1)
+            getParameterCount(1)
+            getParameterName(1, 1)
         end
         setDisplayMode(i % 6)
         drawText(100, 20, "Memory Test " .. i, 12, "centre")

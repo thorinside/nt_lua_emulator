@@ -42,14 +42,14 @@ return {
             print("✗ FAILURE: getAlgorithmCount() returned invalid count:", count)
         end
         
-        -- Test 5: Test getAlgorithmName with valid index (0)
-        local name0 = getAlgorithmName(0)
-        if type(name0) == "string" then
-            print("✓ SUCCESS: getAlgorithmName(0) returns a string")
-            print("  Algorithm name at index 0:", name0)
+        -- Test 5: Test getAlgorithmName with valid index (1)
+        local name1 = getAlgorithmName(1)
+        if type(name1) == "string" then
+            print("✓ SUCCESS: getAlgorithmName(1) returns a string")
+            print("  Algorithm name at index 1:", name1)
         else
-            print("✗ FAILURE: getAlgorithmName(0) did not return a string, type:", type(name0))
-            print("  Value:", tostring(name0))
+            print("✗ FAILURE: getAlgorithmName(1) did not return a string, type:", type(name1))
+            print("  Value:", tostring(name1))
         end
         
         -- Test 6: Test getAlgorithmName with invalid negative index
@@ -61,11 +61,11 @@ return {
         end
         
         -- Test 7: Test getAlgorithmName with index beyond count
-        local nameHigh = getAlgorithmName(count)
+        local nameHigh = getAlgorithmName(count + 1)
         if nameHigh == nil then
-            print("✓ SUCCESS: getAlgorithmName(" .. count .. ") returns nil for out-of-bounds index")
+            print("✓ SUCCESS: getAlgorithmName(" .. (count + 1) .. ") returns nil for out-of-bounds index")
         else
-            print("✗ FAILURE: getAlgorithmName(" .. count .. ") should return nil for out-of-bounds index, got:", tostring(nameHigh))
+            print("✗ FAILURE: getAlgorithmName(" .. (count + 1) .. ") should return nil for out-of-bounds index, got:", tostring(nameHigh))
         end
         
         -- Test 8: Test consistency - current algorithm index should be valid
@@ -81,7 +81,7 @@ return {
         
         -- Test 9: Verify all valid indices return strings
         local allValid = true
-        for i = 0, count - 1 do
+        for i = 1, count do
             local name = getAlgorithmName(i)
             if type(name) ~= "string" then
                 print("✗ FAILURE: getAlgorithmName(" .. i .. ") did not return string, type:", type(name))

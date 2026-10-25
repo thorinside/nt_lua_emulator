@@ -29,7 +29,8 @@ Baseline: Expert Sleepers Lua scripting manual v1.17, stored in
 `max`, `def`, `unit`, `scaling`, and `enumStrings`, as documented in the
 [v1.19 manual](https://www.expert-sleepers.co.uk/downloads/manuals/disting_NT_lua_scripting_1.19.pdf).
 Use the same indices as `getParameter` or those returned by `findParameter`:
-algorithm indices are zero-based; parameter indices include the script's
+algorithm indices are one-based (`1 .. getAlgorithmCount()`), matching
+`findAlgorithm` in the manual; parameter indices include the script's
 `parameterOffset`. Invalid or unmodeled indices return `nil`.
 
 Ranges and defaults are raw integers, not scaled display values. `unit` and
@@ -37,9 +38,9 @@ Ranges and defaults are raw integers, not scaled display values. `unit` and
 volts is 13, and scaling is 0/1/2/3 for none/10/100/1000), not the emulator's
 script-definition constants. `enumStrings` is a fresh array (empty for numeric
 parameters). Script enum ranges retain their one-based script definitions.
-The loaded script (algorithm 0) exposes Bypass at index 1, followed by its
+The loaded script (algorithm 1) exposes Bypass at index 1, followed by its
 own parameters at `parameterOffset + 1` (normally index 2). Enumerate with
-`for index = 1, getParameterCount(0) do ... end`; `getParameterName`,
+`for index = 1, getParameterCount(1) do ... end`; `getParameterName`,
 `getParameterInfo`, `findParameter`, `getParameter`, `setParameter`, and
 `setParameterNormalized` use the same indices. Script parameter writes update
 `self.parameters` and the existing parameter controls. Bypass does not occupy
@@ -120,6 +121,21 @@ loaded script's own Bypass, numeric, scaled, and enum parameters.
   Monitoring works without native MIDI support or an open port; the last 128
   messages are retained by `midiHandler.getOutputHistory()`. This does not
   create four separate hardware transports.
+
+## Algorithm indexing and fixture data
+
+As of v1.7.2, algorithm discovery, parameter access, focus, and drawing use
+one-based algorithm indices. The default preset has 1 = loaded script,
+2 = Reverb, 3 = Delay, 4 = Filter, and 5 = VCO. Prefer `self.algorithmIndex`
+or `findAlgorithm(name)` over hard-coded indices. Older emulator scripts that
+assumed zero-based algorithm indices need updating. `getBusVoltage` retains
+its separately documented stage range of `0 .. getAlgorithmCount()` and
+zero-based bus indices; this patch does not renumber buses or signal stages.
+
+The representative preset is defined in `modules/simulated_algorithms.lua`.
+Add or change entries inside `M.create()` to customize the simulated algorithms
+and their parameter metadata. Each load creates independent parameter state;
+the algorithm count is derived from the table, not hard-coded.
 
 ## Interactive simulation demo
 

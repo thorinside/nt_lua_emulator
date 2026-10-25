@@ -40,7 +40,7 @@ end
 function M.create(options)
     local display = assert(options.display, "display is required")
     local helpers = assert(options.helpers, "helpers is required")
-    local currentAlgorithm = 0
+    local currentAlgorithm = 1
     local currentParameters = {}
     local displayMode, uiExited = "ui", false
     local virtualI2C = require("modules.virtual_i2c").create()
@@ -61,16 +61,15 @@ function M.create(options)
     end
 
     local function algorithmAt(index)
-        index = integer(index)
-        if not index then return nil end
-        return algorithms()[index + 1]
+        if type(index) ~= "number" or index ~= integer(index) or index < 1 then return nil end
+        return algorithms()[index]
     end
 
     local function parameterAt(algorithmIndex, parameterIndex, globalIndex)
         local algorithm = algorithmAt(algorithmIndex)
         if not algorithm then return nil end
 
-        if algorithmIndex == 0 then
+        if algorithmIndex == 1 then
             local loadedScript = script()
             local offset = loadedScript and (loadedScript.parameterOffset or 1) or 0
             if globalIndex and parameterIndex <= offset then
@@ -100,7 +99,7 @@ function M.create(options)
         if type(name) ~= "string" then return nil end
         local matches = {}
         for index, algorithm in ipairs(algorithms()) do
-            if algorithm.name == name then matches[#matches + 1] = index - 1 end
+            if algorithm.name == name then matches[#matches + 1] = index end
         end
         return unpackValues(matches)
     end
@@ -112,7 +111,7 @@ function M.create(options)
     function api.getParameterCount(algorithmIndex)
         local algorithm = algorithmAt(algorithmIndex)
         if not algorithm then return nil end
-        if algorithmIndex == 0 then
+        if algorithmIndex == 1 then
             return #(algorithm.systemParams or {}) + #scriptParameters()
         end
         return #(algorithm.params or {})
@@ -127,7 +126,7 @@ function M.create(options)
         if integer(algorithmIndex) ~= algorithmIndex or
             integer(parameterIndex) ~= parameterIndex or
             algorithmIndex == nil or parameterIndex == nil or
-            algorithmIndex < 0 or parameterIndex < 1 then return nil end
+            algorithmIndex < 1 or parameterIndex < 1 then return nil end
         local parameter = parameterAt(algorithmIndex, parameterIndex, true)
         if not parameter then return nil end
 
@@ -158,14 +157,14 @@ function M.create(options)
     function api.findParameter(algorithmIndex, name)
         if type(name) ~= "string" or not algorithmAt(algorithmIndex) then return nil end
         local matches = {}
-        local params = algorithmIndex == 0 and scriptParameters() or
+        local params = algorithmIndex == 1 and scriptParameters() or
                            (algorithmAt(algorithmIndex).params or {})
         local loadedScript = script()
-        local offset = algorithmIndex == 0 and loadedScript and
+        local offset = algorithmIndex == 1 and loadedScript and
                            (loadedScript.parameterOffset or 1) or 0
 
-        if algorithmIndex == 0 then
-            for index, parameter in ipairs(algorithmAt(0).systemParams or {}) do
+        if algorithmIndex == 1 then
+            for index, parameter in ipairs(algorithmAt(1).systemParams or {}) do
                 if parameter.name == name then matches[#matches + 1] = index end
             end
         end
@@ -184,7 +183,7 @@ function M.create(options)
         local current = currentParameters[algorithmIndex]
         if current ~= nil then return current end
         local loadedScript = script()
-        if algorithmIndex == 0 and loadedScript and #scriptParameters() > 0 then
+        if algorithmIndex == 1 and loadedScript and #scriptParameters() > 0 then
             return (loadedScript.parameterOffset or 1) + 1
         end
         return api.getParameterCount(algorithmIndex) > 0 and 1 or 0
@@ -199,7 +198,7 @@ function M.create(options)
     function api.getParameter(algorithmIndex, parameterIndex)
         local parameter, index, system = parameterAt(algorithmIndex, parameterIndex, true)
         if not parameter then return nil end
-        if algorithmIndex == 0 and not system then
+        if algorithmIndex == 1 and not system then
             local loadedScript = script()
             return loadedScript and loadedScript.parameters and
                        loadedScript.parameters[index] or nil
@@ -218,7 +217,7 @@ function M.create(options)
         if normalized then
             value = math.max(0, math.min(1, value))
             value = parameter.min + value * (parameter.max - parameter.min)
-        elseif algorithmIndex == 0 and not system and parameter.type == "float" then
+        elseif algorithmIndex == 1 and not system and parameter.type == "float" then
             value = value * (parameter.scale or 1)
         else
             value = value * (10 ^ (parameter.scaling or 0))
@@ -231,12 +230,12 @@ function M.create(options)
             value = math.floor(value + 0.5)
         end
         parameter.current = value
-        if algorithmIndex == 0 and system and parameter.name == "Bypass" then
+        if algorithmIndex == 1 and system and parameter.name == "Bypass" then
             local loadedScript = script()
             if loadedScript then loadedScript._emulatorBypassed = value ~= 0 end
         end
 
-        if algorithmIndex == 0 and not system then
+        if algorithmIndex == 1 and not system then
             local loadedScript = script()
             if loadedScript then helpers.updateScriptParameters(scriptParameters(), loadedScript) end
         end
@@ -441,10 +440,11 @@ function M.create(options)
             api.drawAlgorithmUI(currentAlgorithm)
         elseif displayMode == "overview" then
             display.drawText(1, 8, "Preset (simulated)", 15)
-            for index, algorithm in ipairs(algorithms()) do
-                if index > 5 then break end
-                display.drawText(1, 19 + (index - 1) * 10,
-                                 (index - 1 == currentAlgorithm and "> " or "  ") .. algorithm.name, 12)
+            local first = math.floor((currentAlgorithm - 1) / 5) * 5 + 1
+            local preset = algorithms()
+            for index = first, math.min(#preset, first + 4) do
+                display.drawText(1, 19 + (index - first) * 10,
+                                 (index == currentAlgorithm and "> " or "  ") .. preset[index].name, 12)
             end
         elseif displayMode == "meters" then
             display.drawText(1, 8, "Connected buses (V)", 15)
@@ -474,7 +474,7 @@ function M.create(options)
         if displayMode == "overview" and index == 1 then
             value = potValue(value)
             if value and #algorithms() > 0 then
-                currentAlgorithm = selectIndex(value, #algorithms()) - 1
+                currentAlgorithm = selectIndex(value, #algorithms())
             end
         else
             local turn = api["standardPot" .. index .. "Turn"]

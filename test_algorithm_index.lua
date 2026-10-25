@@ -24,9 +24,9 @@ return {
             print("✗ FAILURE: self.algorithmIndex is not a number, type:", type(self.algorithmIndex))
         end
         
-        -- Test 3: Check if algorithmIndex is a valid index (should be >= 0)
-        if self.algorithmIndex and self.algorithmIndex >= 0 then
-            print("✓ SUCCESS: self.algorithmIndex has valid value (>= 0)")
+        -- Test 3: Check if algorithmIndex is a valid index (should be >= 1)
+        if self.algorithmIndex and self.algorithmIndex >= 1 then
+            print("✓ SUCCESS: self.algorithmIndex has valid value (>= 1)")
         else
             print("✗ FAILURE: self.algorithmIndex has invalid value:", self.algorithmIndex)
         end

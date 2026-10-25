@@ -67,7 +67,7 @@ local function testAlgorithmIndex()
         table.insert(result.errors, "self.algorithmIndex is nil")
     elseif type(self.algorithmIndex) ~= "number" then
         table.insert(result.errors, "self.algorithmIndex is not a number: " .. type(self.algorithmIndex))
-    elseif self.algorithmIndex < 0 then
+    elseif self.algorithmIndex < 1 then
         table.insert(result.errors, "self.algorithmIndex is negative: " .. self.algorithmIndex)
     else
         result.details = "algorithmIndex = " .. self.algorithmIndex
@@ -101,7 +101,7 @@ local function testAlgorithmQuery()
         result.details = "Algorithm count: " .. algCount
         
         -- Test getAlgorithmName() for valid indices
-        for i = 0, math.min(algCount - 1, 2) do -- Test first 3 algorithms
+        for i = 1, math.min(algCount, 3) do -- Test first 3 algorithms
             local name = getAlgorithmName(i)
             if name == nil then
                 table.insert(result.errors, "getAlgorithmName(" .. i .. ") returned nil")
@@ -120,9 +120,9 @@ local function testAlgorithmQuery()
             table.insert(result.errors, "getAlgorithmName(-1) should return nil, got: " .. tostring(invalidName))
         end
         
-        invalidName = getAlgorithmName(algCount)
+        invalidName = getAlgorithmName(algCount + 1)
         if invalidName ~= nil then
-            table.insert(result.errors, "getAlgorithmName(" .. algCount .. ") should return nil, got: " .. tostring(invalidName))
+            table.insert(result.errors, "getAlgorithmName(" .. (algCount + 1) .. ") should return nil, got: " .. tostring(invalidName))
         end
     end
     
@@ -137,7 +137,7 @@ local function testParameterQuery()
     local algCount = getAlgorithmCount()
     if algCount and algCount > 0 then
         -- Test first few algorithms
-        for alg = 0, math.min(algCount - 1, 2) do
+        for alg = 1, math.min(algCount, 3) do
             local paramCount = getParameterCount(alg)
             if paramCount == nil then
                 table.insert(result.errors, "getParameterCount(" .. alg .. ") returned nil")
@@ -149,7 +149,7 @@ local function testParameterQuery()
                 result.details = result.details .. "Alg[" .. alg .. "] params:" .. paramCount .. " "
                 
                 -- Test parameter names for this algorithm
-                for param = 0, math.min(paramCount - 1, 1) do -- Test first 2 parameters
+                for param = 1, math.min(paramCount, 2) do -- Test first 2 parameters
                     local paramName = getParameterName(alg, param)
                     if paramName == nil then
                         table.insert(result.errors, "getParameterName(" .. alg .. "," .. param .. ") returned nil")
@@ -159,9 +159,9 @@ local function testParameterQuery()
                 end
                 
                 -- Test invalid parameter index
-                local invalidParam = getParameterName(alg, paramCount)
+                local invalidParam = getParameterName(alg, paramCount + 1)
                 if invalidParam ~= nil then
-                    table.insert(result.errors, "getParameterName(" .. alg .. "," .. paramCount .. ") should return nil")
+                    table.insert(result.errors, "getParameterName(" .. alg .. "," .. (paramCount + 1) .. ") should return nil")
                 end
             end
         end
@@ -172,9 +172,9 @@ local function testParameterQuery()
             table.insert(result.errors, "getParameterCount(-1) should return nil")
         end
         
-        invalidCount = getParameterCount(algCount)
+        invalidCount = getParameterCount(algCount + 1)
         if invalidCount ~= nil then
-            table.insert(result.errors, "getParameterCount(" .. algCount .. ") should return nil")
+            table.insert(result.errors, "getParameterCount(" .. (algCount + 1) .. ") should return nil")
         end
     end
     
@@ -273,7 +273,7 @@ local function testErrorHandling()
         {func = getParameterCount, args = {nil}, desc = "getParameterCount(nil)"},
         {func = getParameterCount, args = {"invalid"}, desc = "getParameterCount(string)"},
         {func = getParameterName, args = {nil, 0}, desc = "getParameterName(nil, 0)"},
-        {func = getParameterName, args = {0, nil}, desc = "getParameterName(0, nil)"},
+        {func = getParameterName, args = {0, nil}, desc = "getParameterName(1, nil)"},
         {func = getParameterName, args = {"invalid", "invalid"}, desc = "getParameterName(string, string)"},
         {func = setDisplayMode, args = {nil}, desc = "setDisplayMode(nil)"},
         {func = setDisplayMode, args = {"invalid"}, desc = "setDisplayMode(string)"}
@@ -311,7 +311,7 @@ local function testPerformance()
     for i = 1, iterations do
         local count = getAlgorithmCount()
         if count and count > 0 then
-            getAlgorithmName(0)
+            getAlgorithmName(1)
         end
     end
     local algQueryTime = love.timer.getTime() - startTime
@@ -319,9 +319,9 @@ local function testPerformance()
     -- Benchmark parameter queries
     startTime = love.timer.getTime()
     for i = 1, iterations do
-        local count = getParameterCount(0)
+        local count = getParameterCount(1)
         if count and count > 0 then
-            getParameterName(0, 0)
+            getParameterName(1, 1)
         end
     end
     local paramQueryTime = love.timer.getTime() - startTime
@@ -375,7 +375,7 @@ local function testBackwardCompatibility()
     -- Test that old API functions still work
     local oldApiFunctions = {
         {func = getCurrentAlgorithm, desc = "getCurrentAlgorithm()"},
-        {func = function() return getCurrentParameter(0) end, desc = "getCurrentParameter(0)"}
+        {func = function() return getCurrentParameter(1) end, desc = "getCurrentParameter(1)"}
     }
     
     for _, test in ipairs(oldApiFunctions) do

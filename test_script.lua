@@ -19,11 +19,11 @@ function script.init()
     print("Total algorithms available: " .. algCount)
     
     if algCount > 0 then
-        print("First algorithm: " .. getAlgorithmName(0))
-        local paramCount = getParameterCount(0)
-        print("Parameters in algorithm 0: " .. paramCount)
+        print("First algorithm: " .. getAlgorithmName(1))
+        local paramCount = getParameterCount(1)
+        print("Parameters in algorithm 1: " .. paramCount)
         if paramCount > 0 then
-            print("First parameter: " .. getParameterName(0, 0))
+            print("First parameter: " .. getParameterName(1, 1))
         end
     end
     
@@ -91,7 +91,7 @@ function script.button1Push(self)
     print("Testing getAlgorithmName function")
     local algCount = getAlgorithmCount()
     print("Total algorithms: " .. algCount)
-    for i = 0, math.min(4, algCount - 1) do  -- Use 0-based indexing
+    for i = 1, math.min(5, algCount) do  -- Use 1-based indexing
         local name = getAlgorithmName(i)
         print(string.format("  Algorithm %d: %s", i, name or "nil"))
     end
@@ -101,12 +101,12 @@ end
 function script.button2Push(self)
     print("===== BUTTON 2 PRESSED =====")
     print("Testing getParameterName function")
-    local algIndex = self.algorithmIndex or 0
+    local algIndex = self.algorithmIndex or 1
     print("Current algorithm index: " .. algIndex)
     local paramCount = getParameterCount(algIndex)
     if paramCount and paramCount > 0 then
         print("Parameters for algorithm " .. algIndex .. " (count: " .. paramCount .. "):")
-        for i = 0, math.min(4, paramCount - 1) do  -- Use 0-based indexing
+        for i = 1, math.min(5, paramCount) do  -- Use 1-based indexing
             local name = getParameterName(algIndex, i)
             print(string.format("  Parameter %d: %s", i, name or "nil"))
         end

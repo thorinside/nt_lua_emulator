@@ -146,7 +146,7 @@ local function runTestSuite(suiteIndex)
         local algQueryTest = pcall(function() 
             local count = getAlgorithmCount()
             if count and count > 0 then
-                local name = getAlgorithmName(0)
+                local name = getAlgorithmName(1)
                 return name ~= nil
             end
             return false
@@ -155,9 +155,9 @@ local function runTestSuite(suiteIndex)
         
         -- Test parameter queries
         local paramQueryTest = pcall(function()
-            local count = getParameterCount(0)
+            local count = getParameterCount(1)
             if count and count > 0 then
-                local name = getParameterName(0, 0)
+                local name = getParameterName(1, 1)
                 return name ~= nil
             end
             return count == 0 -- If no parameters, that's also valid
@@ -198,7 +198,7 @@ local function runTestSuite(suiteIndex)
         -- Test original API functions
         local originalAPITest = pcall(function()
             local alg = getCurrentAlgorithm()
-            local param = getCurrentParameter(0)
+            local param = getCurrentParameter(1)
             return true -- These should not crash
         end)
         if originalAPITest then testScore = testScore + 30 else table.insert(errors, "Original API functions failed") end
