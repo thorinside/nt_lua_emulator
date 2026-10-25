@@ -14,7 +14,7 @@ Baseline: Expert Sleepers Lua scripting manual v1.17, stored in
   `getParameter`, `getParameterCount`, `getParameterInfo`, `getParameterName`, `setParameter`, and
   `setParameterNormalized`.
 - Drawing: integer and smooth primitives, both text fonts and alignments,
-  standard/specific parameter lines, and algorithm UI placeholders.
+  enum/unit-aware parameter lines, and paged algorithm parameter views.
 - Globals: bus voltage, 32-bit 600 MHz cycle count, emulated firmware version,
   MIDI output, I2C command/getter forms, display modes, and UI exit.
 - All parameter unit and scaling constants documented in v1.17.
@@ -68,21 +68,64 @@ loaded script's own Bypass, numeric, scaled, and enum parameters.
 
 ## Emulator boundaries
 
-- The emulator exposes all 64 logical bus indices. Its hardware panel still
-  models the physical 12 inputs and 8 outputs; the remaining 44 aux buses read
-  as 0 V unless supplied by an emulator backend and cannot be patched directly
-  to a physical jack.
-- I2C calls support both documented argument forms. Without an attached I2C
-  backend, commands are no-ops and getters return the requested number of zero
-  bytes.
-- `drawAlgorithmUI`, `drawParameterLine`, and
-  `drawStandardParameterLine` provide useful emulator representations rather
-  than pixel-identical copies of proprietary firmware screens.
+- `getBusVoltage(stage, busIndex)` reads physical bus numbers, not script I/O
+  slots. Zero-based indices 0–11 read the live 12 input jacks, including their
+  generators/scaling; 12–19 read the eight mapped physical outputs. At stage 0
+  the output buses are 0 V (there is no upstream processor); stages 1 through
+  `getAlgorithmCount()` see the loaded script's latest output. The fixture
+  algorithms pass buses through without DSP. For example, script output 2
+  patched to physical output 8 appears at `getBusVoltage(1, 19)`. Aux indices
+  20–63 default to 0 V and can be injected by a host using
+  `signalProcessor.setAuxBusVoltage(oneBasedBus, volts)`. Invalid indices
+  return 0 V. This is a single-processor bus model, not a complete NT DSP chain.
+- I2C supports both documented argument forms with a deterministic virtual
+  register device at each address: `sendI2CCommand(address, register, data...)`
+  writes sequential 8-bit registers; `sendI2CGetter(address, length, register)`
+  reads them. Registers wrap at 256, unwritten registers read zero, and devices
+  at different addresses are independent. Getter responses are capped at 1024
+  bytes. State resets on script load; the last 64 transactions are retained for
+  diagnostics. This is an emulator test protocol, **not** a simulation of a real
+  module's I2C commands. Explicit backend hooks still override it.
+- `drawAlgorithmUI` renders a six-parameter page with the algorithm name,
+  selected parameter, formatted values, enum labels, and units. The standard
+  parameter-line helpers use the same formatting. These are emulator views,
+  not pixel-identical firmware GUIs, and `drawAlgorithmUI` does not recursively
+  invoke the loaded script's own `draw` callback.
+- `standardPot1Turn` selects a six-parameter page; `standardPot2Turn` selects
+  within it; `standardPot3Turn` changes the selected value with directional
+  soft takeover. Its first event anchors the position without jumping; later
+  motion changes the value by the corresponding fraction of its range. Small
+  movements accumulate for enums/integers. Parameter selection never jumps a
+  value. Pot-push shortcuts and firmware-specific page layouts are not modeled.
+- Scripts start in `ui` mode, showing their custom `draw` (or the parameter
+  view if absent). `parameters`, `overview`, `meters`, and `menu` draw usable
+  built-in views. Meters show all physical inputs/outputs; menu shows shortcuts
+  and I2C activity. `exit()` switches to the normal parameter view without
+  quitting LÖVE; `setDisplayMode("ui")` returns to the script's custom UI.
+  Processing continues in every display mode. In built-in modes, pots operate
+  the standard UI (overview pot 1 selects an algorithm). Otherwise a script's
+  pot callbacks take priority, with standard behavior as the fallback.
 - `getFirmwareVersion()` reports `1, 17, 0, "1.17.0 (emulated)"` so scripts can
   feature-detect the emulated SDK baseline.
-- MIDI destination masks are accepted, but output is sent to the emulator's
-  selected MIDI port rather than separate breakout, Select Bus, USB, and
-  internal transports.
+- MIDI destination masks are honored as four logical routes: Breakout (1),
+  Select Bus (2), USB (4), and Internal (8). F4 opens the output-port chooser
+  plus a live per-destination monitor (count and latest hexadecimal bytes).
+  Click/Enter on a route toggles selected-host-output versus monitor-only;
+  route choices persist in `config.json`. External routes default to the
+  selected port, Internal defaults to monitor-only with **no automatic
+  loopback**. Multiple forwarded bits send only once to the shared host port.
+  Monitoring works without native MIDI support or an open port; the last 128
+  messages are retained by `midiHandler.getOutputHistory()`. This does not
+  create four separate hardware transports.
+
+## Interactive simulation demo
+
+Load `scripts/api_simulation_demo.lua` with F2. It mirrors input 1 to output 1
+with controllable Gain/Mode and discoverable Bypass. Pots select page/parameter
+and adjust its value. Button 1 cycles display views, button 2 sends a MIDI
+clock tick to all logical destinations (inspect with F4), button 3 writes and
+reads a virtual I2C register, and button 4 exits the custom UI. Processing is
+still paused by Bypass; display controls remain usable.
 
 ## Automated checks
 
@@ -91,6 +134,8 @@ Run the conformance suite with either supported host runtime:
 ```sh
 lua tests/test_nt_api.lua
 lua tests/test_simulated_parameters.lua
+lua tests/test_api_simulation.lua
+lua tests/test_midi_routing.lua
 lua tests/test_text_formatting.lua
 lua tests/test_ui_script_callbacks.lua
 lua tests/test_control_scheduler.lua

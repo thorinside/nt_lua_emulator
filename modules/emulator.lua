@@ -482,6 +482,9 @@ end
 local function loadMidiConfig()
     local cfg = config.load()
     if cfg.midi then
+        for mask, forward in pairs(cfg.midi.destinationRoutes or {}) do
+            midiHandler.setDestinationRoute(tonumber(mask), forward)
+        end
         if cfg.midi.enabled and cfg.midi.selectedInput and cfg.midi.selectedInput >= 0 then
             midiHandler.openInputPort(cfg.midi.selectedInput)
         end
@@ -1656,6 +1659,10 @@ function M.saveMidiSettings()
     cfg.midi.enabled = midiHandler.isAvailable()
     cfg.midi.selectedInput = midiHandler.getCurrentPortIndex()
     cfg.midi.selectedOutput = midiHandler.getCurrentOutputPortIndex()
+    cfg.midi.destinationRoutes = {}
+    for _, route in ipairs(midiHandler.getDestinationRoutes()) do
+        cfg.midi.destinationRoutes[tostring(route.mask)] = route.forward
+    end
     config.save(cfg)
 end
 

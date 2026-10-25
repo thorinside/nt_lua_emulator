@@ -466,15 +466,14 @@ function M.loadScript(scriptPath, createDefaultMappings)
             -- authoritative implementation of documented SDK globals. The
             -- accessors remain valid as the script and its parameters are
             -- populated later in the load process.
-            local sdkApi = nt_api.create({
+            local sdkApi, sdkRuntime = nt_api.create({
                 display = display,
                 helpers = helpers,
                 getScript = function() return newScript end,
                 getScriptParameters = function() return newScriptParameters end,
                 getAlgorithms = function() return simulatedAlgorithms end,
-                getBusVoltages = function()
-                    local signalProcessor = require("modules.signal_processor")
-                    return signalProcessor.getCurrentInputs()
+                getBusVoltage = function(algorithmIndex, busIndex)
+                    return require("modules.signal_processor").getBusVoltage(algorithmIndex, busIndex)
                 end,
                 getTime = function() return love.timer.getTime() end,
                 getMidiHandler = function() return midiHandler end
@@ -542,6 +541,10 @@ function M.loadScript(scriptPath, createDefaultMappings)
 
             -- *** Assign loaded script to the outer scope variable ***
             newScript = loadedScript -- Now newScript is assigned
+            newScript._emulatorDrawDisplay = sdkRuntime.drawDisplayMode
+            newScript._emulatorHandlePot = sdkRuntime.handlePot
+            newScript._emulatorI2CHistory = sdkRuntime.getI2CHistory
+            display.setDisplayMode("ui")
             simulatedAlgorithms[1].name = newScript.name or "EmulatedScript"
 
             -- Load overall emulator state from state.json (Should this be outside pcall?)

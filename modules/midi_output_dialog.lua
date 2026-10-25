@@ -49,15 +49,23 @@ function M.show()
         }}
     end
     
+    -- Routing rows also act as a live monitor when MIDI hardware is absent.
+    if midiHandler.getDestinationRoutes then
+        local routes = midiHandler.getDestinationRoutes()
+        for i = #routes, 1, -1 do
+            table.insert(midiPorts, 1, {destination = routes[i].mask, name = routes[i].name})
+        end
+    end
+
     -- Center dialog
     local screenWidth = love.graphics.getWidth()
     local screenHeight = love.graphics.getHeight()
     dialogX = (screenWidth - dialogWidth) / 2
-    dialogY = (screenHeight - dialogHeight) / 2
     
     -- Adjust height based on number of items
     local contentHeight = #midiPorts * itemHeight + 80 -- Extra space for title and padding
     dialogHeight = math.min(contentHeight, 400)
+    dialogY = (screenHeight - dialogHeight) / 2
     maxVisibleItems = math.floor((dialogHeight - 80) / itemHeight)
     
     return true
@@ -97,13 +105,13 @@ function M.draw()
     -- Title
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(16))
-    local title = "Select MIDI Output Device"
+    local title = "MIDI Output Routing & Monitor"
     local titleWidth = love.graphics.getFont():getWidth(title)
     love.graphics.print(title, dialogX + (dialogWidth - titleWidth) / 2, dialogY + 10)
     
     -- Instructions
     love.graphics.setFont(love.graphics.newFont(12))
-    local instructions = "Use arrow keys to select, Enter to confirm, Escape to cancel"
+    local instructions = "Enter/click: toggle route or choose port. Esc: close"
     local instructionsWidth = love.graphics.getFont():getWidth(instructions)
     love.graphics.setColor(0.7, 0.7, 0.7, 1)
     love.graphics.print(instructions, dialogX + (dialogWidth - instructionsWidth) / 2, dialogY + 35)
@@ -115,6 +123,7 @@ function M.draw()
     -- Set clipping rectangle for the list
     love.graphics.setScissor(dialogX, listY, dialogWidth, listHeight)
     
+    local routes = midiHandler.getDestinationRoutes and midiHandler.getDestinationRoutes() or {}
     -- Draw items
     for i = 1, #midiPorts do
         local itemY = listY + (i - 1 - scrollOffset) * itemHeight
@@ -132,8 +141,21 @@ function M.draw()
             local port = midiPorts[i]
             local displayName = port.name
             
+            if port.destination then
+                for _, route in ipairs(routes) do
+                    if route.mask == port.destination then
+                        local bytes = {}
+                        for _, byte in ipairs(route.last or {}) do
+                            bytes[#bytes + 1] = string.format("%02X", byte)
+                        end
+                        displayName = string.format("%s: %s | %d | %s", route.name,
+                            route.forward and "Output" or "Monitor", route.count,
+                            #bytes > 0 and table.concat(bytes, " ") or "--")
+                    end
+                end
+            end
             -- Add current indicator
-            if midiHandler.getCurrentOutputPortIndex() == port.index then
+            if not port.destination and midiHandler.getCurrentOutputPortIndex() == port.index then
                 displayName = displayName .. " (Current)"
                 love.graphics.setColor(0.7, 1, 0.7, 1)
             end
@@ -162,6 +184,26 @@ function M.draw()
     end
 end
 
+local function activateSelection()
+    local selected = midiPorts[selectedIndex]
+    if not selected then return end
+    if selected.destination then
+        for _, route in ipairs(midiHandler.getDestinationRoutes()) do
+            if route.mask == selected.destination then
+                midiHandler.setDestinationRoute(route.mask, not route.forward)
+                return -- Keep the monitor open after a routing change.
+            end
+        end
+    elseif midiHandler.isAvailable() then
+        if selected.index >= 0 then
+            midiHandler.openOutputPort(selected.index)
+        else
+            midiHandler.closeOutputPort()
+        end
+        M.hide()
+    end
+end
+
 -- Handle key press
 function M.keypressed(key)
     if not isActive then return false end
@@ -170,17 +212,7 @@ function M.keypressed(key)
         M.hide()
         return true
     elseif key == "return" or key == "kpenter" then
-        -- Select the current item
-        local selected = midiPorts[selectedIndex]
-        if selected and midiHandler.isAvailable() then
-            if selected.index >= 0 then
-                midiHandler.openOutputPort(selected.index)
-            else
-                -- "None" selected - close any open port
-                midiHandler.closeOutputPort()
-            end
-        end
-        M.hide()
+        activateSelection()
         return true
     elseif key == "up" then
         selectedIndex = math.max(1, selectedIndex - 1)
@@ -202,7 +234,7 @@ function M.keypressed(key)
         return true
     elseif key == "pagedown" then
         selectedIndex = math.min(#midiPorts, selectedIndex + maxVisibleItems)
-        scrollOffset = math.min(#midiPorts - maxVisibleItems, scrollOffset + maxVisibleItems)
+        scrollOffset = math.max(0, math.min(#midiPorts - maxVisibleItems, scrollOffset + maxVisibleItems))
         return true
     elseif key == "home" then
         selectedIndex = 1
@@ -235,15 +267,7 @@ function M.mousepressed(x, y, button)
             selectedIndex = clickedIndex
             -- Double-click to select
             if button == 1 then
-                local selected = midiPorts[selectedIndex]
-                if selected and midiHandler.isAvailable() then
-                    if selected.index >= 0 then
-                        midiHandler.openOutputPort(selected.index)
-                    else
-                        midiHandler.closeOutputPort()
-                    end
-                end
-                M.hide()
+                activateSelection()
             end
             return true
         end

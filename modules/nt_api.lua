@@ -31,7 +31,8 @@ end
 
 local function validBytes(bytes)
     for _, value in ipairs(bytes) do
-        if integer(value) ~= value or value < 0 or value > 255 then return false end
+        if type(value) ~= "number" or integer(value) ~= value or
+            value < 0 or value > 255 then return false end
     end
     return true
 end
@@ -41,6 +42,10 @@ function M.create(options)
     local helpers = assert(options.helpers, "helpers is required")
     local currentAlgorithm = 0
     local currentParameters = {}
+    local displayMode, uiExited = "ui", false
+    local virtualI2C = require("modules.virtual_i2c").create()
+    local lastValuePot, valuePotTarget
+    local pageSize = 6
     local firmware = options.firmwareVersion or {1, 17, 0, "1.17.0 (emulated)"}
 
     local function script()
@@ -186,7 +191,7 @@ function M.create(options)
     end
 
     function api.focusParameter(algorithmIndex, parameterIndex)
-        if not algorithmAt(algorithmIndex) then return end
+        if not api.getParameterInfo(algorithmIndex, parameterIndex) then return end
         currentAlgorithm = algorithmIndex
         currentParameters[algorithmIndex] = parameterIndex
     end
@@ -201,12 +206,14 @@ function M.create(options)
         end
         local value = parameter.current
         if value == nil then value = parameter.default or parameter.def or parameter.min end
-        return value / (10 ^ (parameter.scaling or 0))
+        if not parameter.scaling or parameter.scaling == 0 then return value end
+        return value / (10 ^ parameter.scaling)
     end
 
     local function setParameterValue(algorithmIndex, parameterIndex, value, normalized)
         local parameter, _, system = parameterAt(algorithmIndex, parameterIndex, true)
-        if not parameter or type(value) ~= "number" then return false end
+        if not parameter or type(value) ~= "number" or value ~= value or
+            math.abs(value) == math.huge then return false end
 
         if normalized then
             value = math.max(0, math.min(1, value))
@@ -250,10 +257,13 @@ function M.create(options)
         end
     end
 
-    function api.getBusVoltage(_, busIndex)
-        busIndex = integer(busIndex)
-        if not busIndex or busIndex < 0 or busIndex >= 64 then return 0.0 end
-        local values = options.getBusVoltages and options.getBusVoltages() or {}
+    function api.getBusVoltage(algorithmIndex, busIndex)
+        if type(algorithmIndex) ~= "number" or algorithmIndex ~= integer(algorithmIndex) or
+            algorithmIndex < 0 or algorithmIndex > #algorithms() then return 0.0 end
+        if type(busIndex) ~= "number" or busIndex ~= integer(busIndex) or
+            busIndex < 0 or busIndex >= 64 then return 0.0 end
+        if options.getBusVoltage then return options.getBusVoltage(algorithmIndex, busIndex) or 0.0 end
+        local values = options.getBusVoltages and options.getBusVoltages(algorithmIndex) or {}
         return values[busIndex + 1] or 0.0
     end
 
@@ -268,49 +278,79 @@ function M.create(options)
 
     function api.sendI2CCommand(address, ...)
         local bytes = collectBytes(1, ...)
-        if integer(address) ~= address or address < 0 or address > 127 or
-            not validBytes(bytes) then return end
-        if options.sendI2CCommand then options.sendI2CCommand(address, bytes) end
+        if type(address) ~= "number" or integer(address) ~= address or
+            address < 0 or address > 127 or not validBytes(bytes) then return end
+        if options.sendI2CCommand then
+            options.sendI2CCommand(address, bytes)
+        else
+            virtualI2C.sendCommand(address, bytes)
+        end
     end
 
     function api.sendI2CGetter(address, responseLength, ...)
         responseLength = integer(responseLength)
         local bytes = collectBytes(1, ...)
-        if integer(address) ~= address or address < 0 or address > 127 or
-            not responseLength or responseLength < 0 or not validBytes(bytes) then
+        if type(address) ~= "number" or integer(address) ~= address or
+            address < 0 or address > 127 or not responseLength or
+            responseLength < 0 or responseLength > 1024 or
+            not validBytes(bytes) then
             return nil
         end
         if options.sendI2CGetter then
             return options.sendI2CGetter(address, responseLength, bytes)
         end
-        local response = {}
-        for i = 1, responseLength do response[i] = 0 end
-        return response
+        return virtualI2C.get(address, responseLength, bytes)
     end
 
-    function api.sendMIDI(_, ...)
+    function api.sendMIDI(destinations, ...)
         local bytes = {...}
-        if #bytes < 1 or #bytes > 3 or not validBytes(bytes) then return end
+        if type(destinations) ~= "number" or integer(destinations) ~= destinations or
+            destinations < 0 or destinations > 15 or #bytes < 1 or #bytes > 3 or
+            not validBytes(bytes) then return end
         local midi = options.getMidiHandler and options.getMidiHandler() or nil
-        if midi and midi.isAvailable and midi.isAvailable() then
+        if midi and midi.sendToDestinations then
+            midi.sendToDestinations(destinations, unpackValues(bytes))
+        elseif destinations > 0 and midi and midi.isAvailable and midi.isAvailable() then
             midi.sendMessage(unpackValues(bytes))
         end
     end
 
     function api.setDisplayMode(mode)
+        local valid = {overview = true, meters = true, parameters = true,
+                       ui = true, algorithm = true, menu = true}
+        if not valid[mode] then return end
+        displayMode = mode
+        if mode == "ui" then uiExited = false end
         display.setDisplayMode(mode)
     end
 
     function api.exit()
-        display.setDisplayMode("algorithm")
+        uiExited = true
+        api.setDisplayMode("algorithm")
+    end
+
+    local unitLabels = {
+        [2] = "dB", [3] = "dB", [4] = "%", [5] = "Hz", [6] = "st",
+        [7] = "ct", [8] = "ms", [9] = "s", [10] = "frames", [12] = "mV",
+        [13] = "V", [14] = "BPM"
+    }
+    local function formattedValue(algorithmIndex, parameterIndex)
+        local info = api.getParameterInfo(algorithmIndex, parameterIndex)
+        local value = api.getParameter(algorithmIndex, parameterIndex)
+        if not info or value == nil then return "--" end
+        if info.unit == 1 then
+            return info.enumStrings[value - info.min + 1] or tostring(value)
+        end
+        local label = info.scaling > 0 and
+                          string.format("%." .. info.scaling .. "f", value) or tostring(value)
+        local unit = unitLabels[info.unit]
+        return unit and (label .. " " .. unit) or label
     end
 
     function api.drawParameterLine(algorithmIndex, parameterIndex, yOffset)
-        local parameter = parameterAt(algorithmIndex, parameterIndex, true)
-        local name = parameter and parameter.name or "Parameter"
-        local value = api.getParameter(algorithmIndex, parameterIndex)
-        local text = value == nil and name or string.format("%s: %s", name, tostring(value))
-        display.drawText(1, (yOffset or 0) + 8, text, 15)
+        local name = api.getParameterName(algorithmIndex, parameterIndex) or "Parameter"
+        display.drawText(1, (yOffset or 0) + 8,
+                         name .. ": " .. formattedValue(algorithmIndex, parameterIndex), 15)
     end
 
     function api.drawStandardParameterLine()
@@ -320,23 +360,131 @@ function M.create(options)
     end
 
     function api.drawAlgorithmUI(algorithmIndex)
-        display.drawText(128, 36, api.getAlgorithmName(algorithmIndex) or "Algorithm",
-                         15, "centre")
+        local name = api.getAlgorithmName(algorithmIndex)
+        if not name then return end
+        display.drawText(1, 8, name, 15)
+        local count = api.getParameterCount(algorithmIndex)
+        local focused = api.getCurrentParameter(algorithmIndex)
+        if count == 0 then
+            display.drawText(1, 24, "No parameters", 8)
+            return
+        end
+        local first = math.floor((focused - 1) / pageSize) * pageSize + 1
+        for index = first, math.min(count, first + pageSize - 1) do
+            local marker = index == focused and "> " or "  "
+            local text = marker .. api.getParameterName(algorithmIndex, index) .. ": " ..
+                             formattedValue(algorithmIndex, index)
+            display.drawText(1, 17 + (index - first) * 9, text, index == focused and 15 or 8)
+        end
+    end
+
+    local function potValue(value)
+        if type(value) ~= "number" or value ~= value or math.abs(value) == math.huge then
+            return nil
+        end
+        return math.max(0, math.min(1, value))
+    end
+    local function selectIndex(value, count)
+        return math.min(count, math.floor(value * count) + 1)
     end
 
     function api.standardPot1Turn(value)
-        if options.standardPotTurn then options.standardPotTurn(1, value) end
+        if options.standardPotTurn then return options.standardPotTurn(1, value) end
+        value = potValue(value)
+        local count = api.getParameterCount(currentAlgorithm) or 0
+        if not value or count == 0 then return end
+        local page = selectIndex(value, math.ceil(count / pageSize)) - 1
+        local withinPage = (api.getCurrentParameter(currentAlgorithm) - 1) % pageSize
+        api.focusParameter(currentAlgorithm, math.min(count, page * pageSize + withinPage + 1))
     end
 
     function api.standardPot2Turn(value)
-        if options.standardPotTurn then options.standardPotTurn(2, value) end
+        if options.standardPotTurn then return options.standardPotTurn(2, value) end
+        value = potValue(value)
+        local count = api.getParameterCount(currentAlgorithm) or 0
+        if not value or count == 0 then return end
+        local first = math.floor((api.getCurrentParameter(currentAlgorithm) - 1) / pageSize) * pageSize
+        api.focusParameter(currentAlgorithm, first + selectIndex(value, math.min(pageSize, count - first)))
     end
 
     function api.standardPot3Turn(value)
-        if options.standardPotTurn then options.standardPotTurn(3, value) end
+        if options.standardPotTurn then return options.standardPotTurn(3, value) end
+        value = potValue(value)
+        if not value then return end
+        local previous = lastValuePot
+        lastValuePot = value
+        -- Directional soft takeover: selecting a parameter never causes a jump.
+        if previous == nil then return end
+        local index = api.getCurrentParameter(currentAlgorithm)
+        local info = api.getParameterInfo(currentAlgorithm, index)
+        local current = api.getParameter(currentAlgorithm, index)
+        if not info or current == nil or info.max == info.min then return end
+        if not valuePotTarget or valuePotTarget.algorithm ~= currentAlgorithm or
+            valuePotTarget.index ~= index or valuePotTarget.current ~= current then
+            valuePotTarget = {algorithm = currentAlgorithm, index = index,
+                normalized = (current * 10 ^ info.scaling - info.min) / (info.max - info.min)}
+        end
+        valuePotTarget.normalized = math.max(0, math.min(1,
+            valuePotTarget.normalized + value - previous))
+        api.setParameterNormalized(currentAlgorithm, index, valuePotTarget.normalized)
+        valuePotTarget.current = api.getParameter(currentAlgorithm, index)
     end
 
-    return api
+    -- Host runtime hooks are returned separately, not installed as firmware globals.
+    local runtime = {}
+    function runtime.drawDisplayMode()
+        local loadedScript = script()
+        if displayMode == "ui" or (displayMode == "algorithm" and not uiExited) then
+            if loadedScript and loadedScript.draw then return false end
+            api.drawAlgorithmUI(currentAlgorithm)
+        elseif displayMode == "parameters" or displayMode == "algorithm" then
+            api.drawAlgorithmUI(currentAlgorithm)
+        elseif displayMode == "overview" then
+            display.drawText(1, 8, "Preset (simulated)", 15)
+            for index, algorithm in ipairs(algorithms()) do
+                if index > 5 then break end
+                display.drawText(1, 19 + (index - 1) * 10,
+                                 (index - 1 == currentAlgorithm and "> " or "  ") .. algorithm.name, 12)
+            end
+        elseif displayMode == "meters" then
+            display.drawText(1, 8, "Connected buses (V)", 15)
+            local draw = display.drawTinyText or display.drawText
+            for bus = 1, 20 do
+                local label = bus <= 12 and ("I" .. bus) or ("O" .. (bus - 12))
+                local stage = bus <= 12 and 0 or #algorithms()
+                draw(1 + ((bus - 1) % 5) * 51, 22 + math.floor((bus - 1) / 5) * 12,
+                     string.format("%s %+.2f", label, api.getBusVoltage(stage, bus - 1)), 12)
+            end
+        elseif displayMode == "menu" then
+            display.drawText(1, 8, "Emulator tools", 15)
+            display.drawText(1, 22, "F2 Load  F3 MIDI in  F4 MIDI out", 12)
+            display.drawText(1, 34, "MIDI routing + monitor: F4", 12)
+            local history = virtualI2C.getHistory()
+            local last = history[#history]
+            display.drawText(1, 46, "I2C: virtual register device", 10)
+            display.drawText(1, 58, last and string.format("Last %s @ 0x%02X", last.kind, last.address) or
+                             "I2C: no traffic yet", 10)
+        end
+        return true
+    end
+    function runtime.handlePot(index, value)
+        if displayMode == "ui" or (displayMode == "algorithm" and not uiExited) then
+            return false
+        end
+        if displayMode == "overview" and index == 1 then
+            value = potValue(value)
+            if value and #algorithms() > 0 then
+                currentAlgorithm = selectIndex(value, #algorithms()) - 1
+            end
+        else
+            local turn = api["standardPot" .. index .. "Turn"]
+            if turn then turn(value) end
+        end
+        return true
+    end
+    runtime.getI2CHistory = virtualI2C.getHistory
+
+    return api, runtime
 end
 
 return M

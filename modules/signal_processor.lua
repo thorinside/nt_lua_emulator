@@ -9,6 +9,7 @@ local inputClock = {}
 local inputPolarity = {}
 local inputScaling = {}
 local prevGateStates = {}
+local auxiliaryBuses = {}
 local clockBPM = 110 -- Default BPM
 local minBPM = 30
 local maxBPM = 200
@@ -24,6 +25,7 @@ function M.init(deps)
     -- Store dependencies
     M.safeScriptCall = deps.safeScriptCall
     M.scriptManager = deps.scriptManager
+    auxiliaryBuses = {}
     
     -- Use shared currentOutputs from emulator
     if deps.currentOutputs then
@@ -83,6 +85,32 @@ function M.getCurrentInputs() return currentInputs end
 
 -- Get current outputs
 function M.getCurrentOutputs() return currentOutputs end
+
+-- Logical NT buses: inputs 1-12, outputs 13-20, aux 21-64.
+-- Only algorithm 0 processes signals; preset fixtures downstream pass through.
+function M.getBusVoltage(algorithmIndex, busIndex)
+    if type(algorithmIndex) ~= "number" or algorithmIndex < 0 or
+        algorithmIndex ~= math.floor(algorithmIndex) or type(busIndex) ~= "number" or
+        busIndex ~= math.floor(busIndex) or busIndex < 0 or busIndex >= 64 then return 0 end
+    local bus = busIndex + 1
+    if bus <= 12 then return currentInputs[bus] or 0 end
+    if bus <= 20 then return algorithmIndex > 0 and (currentOutputs[bus - 12] or 0) or 0 end
+    return auxiliaryBuses[bus] or 0
+end
+
+function M.getBusVoltages(algorithmIndex)
+    local values = {}
+    for bus = 1, 64 do values[bus] = M.getBusVoltage(algorithmIndex, bus - 1) end
+    return values
+end
+
+-- Host-side injection for auxiliary buses (one-based NT bus number).
+function M.setAuxBusVoltage(bus, value)
+    if type(bus) ~= "number" or bus ~= math.floor(bus) or bus < 21 or bus > 64 or
+        type(value) ~= "number" or value ~= value or math.abs(value) == math.huge then return false end
+    auxiliaryBuses[bus] = value
+    return true
+end
 
 -- Get input clock states
 function M.getInputClock(inputIndex)
@@ -174,6 +202,7 @@ function M.triggerPulse(inputIndex)
 
     triggerPulseActive[inputIndex] = true
     triggerPulseTimes[inputIndex] = time
+    currentInputs[inputIndex] = 10.0 * (inputScaling[inputIndex] or 1.0)
 
     return true
 end
@@ -250,6 +279,8 @@ function M.updateInputs(scriptInputAssignments, script, scriptOutputAssignments)
             local baseValue = clockState and 5 or 0
             -- Apply scaling to the base value
             local newValue = baseValue * scale
+            -- Callbacks querying buses must see this transition, not last frame.
+            currentInputs[i] = newValue
 
             -- Process gate inputs by checking which script inputs this physical input is assigned to
             for scriptInputIdx, assignedPhysInput in pairs(

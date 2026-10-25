@@ -218,7 +218,9 @@ assertEqual(modes[2], "algorithm", "UI exit mode")
 
 api.drawStandardParameterLine()
 api.drawAlgorithmUI(1)
-assertEqual(#drawn, 2, "SDK drawing helpers")
+assertEqual(#drawn, 3, "SDK drawing helpers")
+assertEqual(drawn[2][3], "Reverb", "algorithm parameter view heading")
+assertEqual(drawn[3][3], "> Mix: 25", "algorithm parameter view value")
 assertEqual(drawn[1][3], "Speed: 2.5", "focused parameter line")
 
 require("modules.constants")

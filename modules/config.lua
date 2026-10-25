@@ -16,7 +16,9 @@ local defaultConfig = {
     minimalMode = false, -- Add minimal mode setting
     midi = {
         enabled = false,
-        selectedInput = -1 -- -1 means no input selected
+        selectedInput = -1, -- -1 means no input selected
+        selectedOutput = -1,
+        destinationRoutes = {} -- Stringified NT destination masks -> forward to host port
     }
 }
 

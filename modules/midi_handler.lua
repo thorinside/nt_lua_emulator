@@ -74,8 +74,8 @@ function M.openInputPort(portIndex)
         return false
     end
     
-    -- Close current port if open
-    M.close()
+    -- Selecting an input must not disconnect the independently selected output.
+    M.closeInputPort()
     
     -- Validate port index
     local portCount = midi.getinportcount()
@@ -124,6 +124,14 @@ end
 -- Get current input port index
 function M.getCurrentPortIndex()
     return inputPortIndex
+end
+
+function M.closeInputPort()
+    if midiAvailable and midi and currentInputPort and midi.closein then
+        midi.closein(currentInputPort)
+    end
+    currentInputPort = nil
+    inputPortIndex = -1
 end
 
 -- Helper to extract MIDI channel from status byte
@@ -261,5 +269,14 @@ function M.close()
     currentOutputPort = nil
     outputPortIndex = -1
 end
+
+-- Available even when no native MIDI library or output port is installed.
+local router = require("modules.midi_router").create(function(...)
+    return M.sendMessage(...)
+end)
+M.sendToDestinations = router.send
+M.getDestinationRoutes = router.getRoutes
+M.setDestinationRoute = router.setRoute
+M.getOutputHistory = router.getHistory
 
 return M

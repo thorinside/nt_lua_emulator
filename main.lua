@@ -47,6 +47,7 @@ function love.mousepressed(x, y, button)
     -- Handle mousepressed in MIDI input dialog if it's open
     if MidiInputDialog.isActive() then
         if MidiInputDialog.mousepressed(x, y, button) then
+            emulator.saveMidiSettings()
             return
         end
     end
@@ -54,6 +55,7 @@ function love.mousepressed(x, y, button)
     -- Handle mousepressed in MIDI output dialog if it's open
     if MidiOutputDialog.isActive() then
         if MidiOutputDialog.mousepressed(x, y, button) then
+            emulator.saveMidiSettings()
             return
         end
     end

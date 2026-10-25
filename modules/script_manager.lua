@@ -121,6 +121,9 @@ function M.setupControlCallbacks(scriptObj)
         end,
         onPotChange = function(potIndex, value)
             if scriptObj then
+                if scriptObj._emulatorHandlePot and scriptObj._emulatorHandlePot(potIndex, value) then
+                    return
+                end
                 local debug_utils = require("modules.debug_utils")
                 debug_utils.debugLog(string.format(
                                          "[ScriptManager] onPotChange - potIndex: %d, value (0-1): %.4f",
@@ -130,6 +133,9 @@ function M.setupControlCallbacks(scriptObj)
                     callControlCallback(scriptObj, scriptObj[functionName], value)
                 elseif scriptObj.pot then
                     callControlCallback(scriptObj, scriptObj.pot, potIndex, value)
+                else
+                    local standard = _G["standardPot" .. potIndex .. "Turn"]
+                    if type(standard) == "function" then standard(value) end
                 end
             end
         end,
@@ -234,7 +240,9 @@ end
 
 -- Call the script's draw function
 function M.callScriptDraw()
-    if not script or not script.draw then return false end
+    if not script then return false end
+    if script._emulatorDrawDisplay and script._emulatorDrawDisplay() then return true end
+    if not script.draw then return false end
     local result = callControlCallback(script, script.draw)
     if not script.isUiScript and not result and
         type(_G.drawStandardParameterLine) == "function" then

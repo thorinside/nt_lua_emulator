@@ -54,6 +54,14 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 2. Choose from available MIDI input devices
 3. MIDI messages will be routed to scripts that support MIDI input
 4. Scripts can define MIDI channel filtering and message type support
+5. Press **F4** to choose an output port and monitor Breakout/Select Bus/USB/Internal destinations. Click a route to toggle host output or monitor-only; monitoring also works without MIDI hardware.
+
+### API Simulation
+
+Load `scripts/api_simulation_demo.lua` with F2 to try discoverable script parameters
+(including Bypass), working standard pots, live bus voltages, display modes,
+MIDI destination monitoring, and a deterministic virtual I2C register device.
+See [SDK conformance and simulation limits](docs/sdk-conformance.md) for details.
 
 ### Basic Usage
 
@@ -85,6 +93,7 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 
 - **F2**: Open script selection dialog
 - **F3**: Open MIDI input device selection dialog
+- **F4**: Open MIDI output routing and monitor dialog
 - **Alt+F4** / **Cmd+Q**: Quit the application
 - **Arrow keys**: Navigate in file selection dialog
 - **Enter**: Confirm selection in dialogs
