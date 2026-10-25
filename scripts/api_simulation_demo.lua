@@ -1,5 +1,5 @@
 -- F2: load this script. Pots: page / parameter / value (directional takeover).
--- Buttons: 1 display mode, 2 MIDI test, 3 I2C register test, 4 exit UI.
+-- Buttons: 1 display mode, 2 MIDI test, 3 I2C register test, 4 exit UI. F5: MIDI log.
 -- Input 1 is multiplied by Gain and sent to output 1; inspect the Meters view.
 local modes = {"ui", "parameters", "overview", "meters", "menu"}
 local modeIndex, registerValue = 1, 0
@@ -26,7 +26,7 @@ return {
         setDisplayMode(modes[modeIndex])
     end,
     button2Push = function(self)
-        sendMIDI(0xF, 0xF8) -- One clock tick, visible per destination in F4.
+        sendMIDI(0xF, 0xF8) -- One clock tick, visible in the non-modal F5 log.
     end,
     button3Push = function(self)
         registerValue = (registerValue + 1) % 256
@@ -36,7 +36,7 @@ return {
     button4Push = function(self) exit() end,
     draw = function(self)
         drawAlgorithmUI(self.algorithmIndex)
-        drawTinyText(1, 62, "B1 Mode  B2 MIDI  B3 I2C  B4 Exit  F4 Monitor")
+        drawTinyText(1, 62, "B1 Mode  B2 MIDI  B3 I2C  B4 Exit  F5 Log")
         return true
     end
 }

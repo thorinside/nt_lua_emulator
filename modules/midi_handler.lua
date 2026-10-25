@@ -150,6 +150,16 @@ function M.isNoteMessage(status)
     return messageType == 8 or messageType == 9
 end
 
+-- Message filter names documented by the NT Lua API.
+function M.matchesMessageType(status, requested)
+    if type(status) ~= "number" then return false end
+    local kind = math.floor(status / 16)
+    if requested == "note" then return kind == 8 or kind == 9 end
+    local kinds = {cc = 11, bend = 14, aftertouch = 13,
+                   ["poly pressure"] = 10, ["program change"] = 12}
+    return kinds[requested] ~= nil and kind == kinds[requested]
+end
+
 -- Get list of available MIDI output ports
 function M.getOutputPorts()
     if not midiAvailable or not midi then
@@ -273,10 +283,13 @@ end
 -- Available even when no native MIDI library or output port is installed.
 local router = require("modules.midi_router").create(function(...)
     return M.sendMessage(...)
+end, function()
+    return love and love.timer and love.timer.getTime() or os.clock()
 end)
 M.sendToDestinations = router.send
 M.getDestinationRoutes = router.getRoutes
 M.setDestinationRoute = router.setRoute
 M.getOutputHistory = router.getHistory
+M.clearOutputHistory = router.clear
 
 return M

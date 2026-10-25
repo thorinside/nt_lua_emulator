@@ -3,6 +3,7 @@ local emulator = require("modules.emulator")
 local PathInputDialog = require("modules.path_input_dialog")
 local MidiInputDialog = require("modules.midi_input_dialog")
 local MidiOutputDialog = require("modules.midi_output_dialog")
+local MidiMonitor = require("modules.midi_monitor")
 local debug_utils = require("modules.debug_utils")
 
 function love.load()
@@ -16,8 +17,10 @@ function love.load()
     })
     
     -- Initialize MIDI output dialog
+    MidiMonitor.init({midiHandler = emulator.getMidiHandler()})
     MidiOutputDialog.init({
-        midiHandler = emulator.getMidiHandler()
+        midiHandler = emulator.getMidiHandler(),
+        onShowMonitor = MidiMonitor.show
     })
 
     -- Enable memory profiling with F11 key
@@ -32,6 +35,7 @@ end
 
 function love.draw()
     emulator.draw()
+    MidiMonitor.draw()
     PathInputDialog.draw()
     MidiInputDialog.draw()
     MidiOutputDialog.draw()
@@ -60,11 +64,18 @@ function love.mousepressed(x, y, button)
         end
     end
 
+    if MidiMonitor.mousepressed(x, y, button) then return end
     emulator.mousepressed(x, y, button)
 end
 
-function love.mousemoved(x, y, dx, dy) emulator.mousemoved(x, y, dx, dy) end
-function love.mousereleased(x, y, button) emulator.mousereleased(x, y, button) end
+function love.mousemoved(x, y, dx, dy)
+    if MidiMonitor.mousemoved(x, y) then return end
+    emulator.mousemoved(x, y, dx, dy)
+end
+function love.mousereleased(x, y, button)
+    MidiMonitor.mousereleased(x, y, button)
+    emulator.mousereleased(x, y, button)
+end
 function love.wheelmoved(x, y)
     -- Handle wheelmoved in path input dialog first if it's open
     if PathInputDialog.isOpen() then
@@ -81,6 +92,7 @@ function love.wheelmoved(x, y)
         if MidiOutputDialog.wheelmoved(x, y) then return end
     end
 
+    if MidiMonitor.wheelmoved(x, y) then return end
     emulator.wheelmoved(x, y)
 end
 
@@ -88,6 +100,17 @@ function love.keypressed(key, scancode, isrepeat)
     -- Alt+F4 or Command+Q to quit
     if (key == "f4" and love.keyboard.isDown("lalt")) or
         (key == "q" and love.keyboard.isDown("lgui")) then love.event.quit() end
+
+    -- The log is non-modal: script/hardware controls continue to work.
+    if key == "f5" and not PathInputDialog.isOpen() and not MidiInputDialog.isActive() then
+        if MidiOutputDialog.isActive() then
+            MidiOutputDialog.hide()
+            MidiMonitor.show()
+        else
+            MidiMonitor.toggle()
+        end
+        return
+    end
 
     -- Check for F2 key to open path input dialog
     if key == "f2" and not PathInputDialog.isOpen() and not MidiInputDialog.isActive() then

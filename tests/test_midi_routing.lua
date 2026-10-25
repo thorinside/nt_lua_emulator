@@ -24,10 +24,15 @@ router.setRoute(1, false)
 router.send(1, 0x90, 60, 100)
 equal(#sent, 3)
 equal(router.send(0, 0xF8), true)
-equal(#router.getHistory(), 5)
+equal(#router.getHistory(), 6)
+equal(router.getHistory()[6].delivery, "ignored")
+assert(router.getHistory()[6].reason:find("mask 0", 1, true))
 equal(router.send(16, 0xF8), false)
 equal(router.send(1, 256), false)
 equal(router.send(1, 0x90, 60, 1, 2), false)
+equal(router.getHistory()[7].delivery, "invalid")
+equal(router.getHistory()[8].delivery, "invalid")
+equal(router.getHistory()[9].delivery, "invalid")
 equal(router.setRoute(16, true), false)
 local history = router.getHistory()
 history[1].bytes[1] = 0
@@ -55,6 +60,16 @@ api.sendMIDI(8, 0x90, 64, 127)
 equal(router.getRoutes()[4].last[2], 64)
 api.sendMIDI(-1, 0xF8)
 equal(router.getRoutes()[4].last[2], 64)
+local rejected = router.getHistory()
+equal(rejected[#rejected].delivery, "invalid")
+api.sendMIDI(1, nil, 64)
+rejected = router.getHistory()
+equal(rejected[#rejected].delivery, "invalid")
+router.clear()
+equal(#router.getHistory(), 0)
+equal(router.getRoutes()[1].count, 0)
+equal(router.getRoutes()[1].last, nil)
+api.sendMIDI(8, 0x90, 64, 127)
 
 -- Chooser still exposes route controls and live byte monitors without hardware.
 local printed = {}
@@ -70,7 +85,8 @@ _G.love = {graphics = {
     setScissor = function() end
 }}
 local dialog = require("modules.midi_output_dialog")
-dialog.init({midiHandler = handler})
+local openedLog = false
+dialog.init({midiHandler = handler, onShowMonitor = function() openedLog = true end})
 assert(dialog.show())
 equal(dialog.getSelectedPort().destination, 1)
 local before = router.getRoutes()[1].forward
@@ -79,10 +95,16 @@ equal(router.getRoutes()[1].forward, not before)
 equal(dialog.isActive(), true)
 dialog.draw()
 assert(table.concat(printed, "\n"):find("90 40 7F", 1, true))
--- Five rows produce a centered 230px dialog; first row starts at y=245.
+-- Six rows produce a centered 260px dialog; first row starts at y=230.
 dialog.mousepressed(250, 250, 1)
 equal(router.getRoutes()[1].forward, before)
 dialog.keypressed("escape")
+equal(dialog.isActive(), false)
+dialog.show()
+for i = 1, 4 do dialog.keypressed("down") end
+equal(dialog.getSelectedPort().monitor, true)
+dialog.keypressed("return")
+equal(openedLog, true)
 equal(dialog.isActive(), false)
 
 -- Native handler also exposes a monitor before any native MIDI initialization.

@@ -40,7 +40,6 @@ local json = require("lib.dkjson") -- Add JSON library
 local debug_utils = require("modules.debug_utils")
 local PathInputDialog = require("modules.path_input_dialog")
 local MidiInputDialog = require("modules.midi_input_dialog")
-local MidiOutputDialog = require("modules.midi_output_dialog")
 
 local origUpdateTime, origUpdateTriggers, origRender, origUpdateParams
 
@@ -506,7 +505,7 @@ local function getScriptMidiChannel()
         end
     end
     
-    return 0 -- Default to omni mode
+    return nil -- No channel parameter means no channel filtering.
 end
 
 --------------------------------------------------------------------------------
@@ -1089,17 +1088,16 @@ function M.update(dt)
                     
                     -- Channel routing working correctly
                     
-                    -- Only pass message if channel matches or omni mode (channel 0)
-                    if scriptChannel == 0 or msgChannel == scriptChannel then
+                    -- A configured channel parameter of 0 disables MIDI, per SDK.
+                    if scriptChannel == nil or (scriptChannel > 0 and msgChannel == scriptChannel) then
                         -- Check if this is a supported message type
                         local isSupported = false
                         if midiConfig.messages then
                             for _, msgType in ipairs(midiConfig.messages) do
-                                if msgType == "note" and midiHandler.isNoteMessage(msg[1]) then
+                                if midiHandler.matchesMessageType(msg[1], msgType) then
                                     isSupported = true
                                     break
                                 end
-                                -- Can add more message types here (cc, pitchbend, etc)
                             end
                         end
                         
@@ -1131,11 +1129,9 @@ function M.keypressed(key)
         return
     end
 
-    -- Hardware control key bindings (check before minimal mode to respect priority)
-    -- Skip hardware keys if dialogs are active
-    if not (PathInputDialog.isOpen() or 
-           MidiInputDialog.isActive() or 
-           MidiOutputDialog.isActive()) then
+    -- F4 routing has no text entry: allow hardware shortcuts to generate MIDI.
+    -- File/MIDI-input dialogs still own keyboard focus.
+    if not (PathInputDialog.isOpen() or MidiInputDialog.isActive()) then
         local hardwareKey = HARDWARE_KEY_MAPPINGS[key]
         if hardwareKey then
             -- Simulate hardware control press
@@ -1244,11 +1240,8 @@ function M.keypressed(key)
 end
 
 function M.keyreleased(key)
-    -- Hardware control key bindings (check before minimal mode to respect priority)
-    -- Skip hardware keys if dialogs are active
-    if not (PathInputDialog.isOpen() or 
-           MidiInputDialog.isActive() or 
-           MidiOutputDialog.isActive()) then
+    -- Match keypress routing so opening F4 cannot strand a held button/note.
+    if not (PathInputDialog.isOpen() or MidiInputDialog.isActive()) then
         local hardwareKey = HARDWARE_KEY_MAPPINGS[key]
         if hardwareKey then
             -- Simulate hardware control release

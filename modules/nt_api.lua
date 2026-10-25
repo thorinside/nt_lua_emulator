@@ -302,14 +302,17 @@ function M.create(options)
     end
 
     function api.sendMIDI(destinations, ...)
-        local bytes = {...}
-        if type(destinations) ~= "number" or integer(destinations) ~= destinations or
-            destinations < 0 or destinations > 15 or #bytes < 1 or #bytes > 3 or
-            not validBytes(bytes) then return end
         local midi = options.getMidiHandler and options.getMidiHandler() or nil
         if midi and midi.sendToDestinations then
-            midi.sendToDestinations(destinations, unpackValues(bytes))
-        elseif destinations > 0 and midi and midi.isAvailable and midi.isAvailable() then
+            -- The router validates and records rejected calls as diagnostics too.
+            midi.sendToDestinations(destinations, ...)
+            return
+        end
+        local bytes = {...}
+        if type(destinations) ~= "number" or integer(destinations) ~= destinations or
+            destinations < 1 or destinations > 15 or #bytes < 1 or #bytes > 3 or
+            not validBytes(bytes) then return end
+        if midi and midi.isAvailable and midi.isAvailable() then
             midi.sendMessage(unpackValues(bytes))
         end
     end
@@ -458,7 +461,7 @@ function M.create(options)
         elseif displayMode == "menu" then
             display.drawText(1, 8, "Emulator tools", 15)
             display.drawText(1, 22, "F2 Load  F3 MIDI in  F4 MIDI out", 12)
-            display.drawText(1, 34, "MIDI routing + monitor: F4", 12)
+            display.drawText(1, 34, "F4 MIDI routing  F5 MIDI log", 12)
             local history = virtualI2C.getHistory()
             local last = history[#history]
             display.drawText(1, 46, "I2C: virtual register device", 10)

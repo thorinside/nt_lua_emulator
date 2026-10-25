@@ -16,10 +16,12 @@ local maxVisibleItems = 8
 
 -- Dependencies
 local midiHandler = nil
+local onShowMonitor
 
 -- Initialize the dialog
 function M.init(deps)
     midiHandler = deps.midiHandler
+    onShowMonitor = deps.onShowMonitor
     return M
 end
 
@@ -39,13 +41,13 @@ function M.show()
         -- Add "None" option at the beginning
         table.insert(midiPorts, 1, {
             index = -1,
-            name = "None (Disable MIDI Output)"
+            name = "No host output (capture only)"
         })
     else
         -- No MIDI support
         midiPorts = {{
             index = -1,
-            name = "MIDI support not available"
+            name = "No native MIDI ports (capture still works)"
         }}
     end
     
@@ -56,6 +58,10 @@ function M.show()
             table.insert(midiPorts, 1, {destination = routes[i].mask, name = routes[i].name})
         end
     end
+
+    table.insert(midiPorts, math.min(5, #midiPorts + 1), {
+        monitor = true, name = "Open live MIDI event log (F5)"
+    })
 
     -- Center dialog
     local screenWidth = love.graphics.getWidth()
@@ -105,13 +111,13 @@ function M.draw()
     -- Title
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.setFont(love.graphics.newFont(16))
-    local title = "MIDI Output Routing & Monitor"
+    local title = "MIDI Output Routing"
     local titleWidth = love.graphics.getFont():getWidth(title)
     love.graphics.print(title, dialogX + (dialogWidth - titleWidth) / 2, dialogY + 10)
     
     -- Instructions
     love.graphics.setFont(love.graphics.newFont(12))
-    local instructions = "Enter/click: toggle route or choose port. Esc: close"
+    local instructions = "F5: live log | Enter/click: change route or port"
     local instructionsWidth = love.graphics.getFont():getWidth(instructions)
     love.graphics.setColor(0.7, 0.7, 0.7, 1)
     love.graphics.print(instructions, dialogX + (dialogWidth - instructionsWidth) / 2, dialogY + 35)
@@ -149,13 +155,13 @@ function M.draw()
                             bytes[#bytes + 1] = string.format("%02X", byte)
                         end
                         displayName = string.format("%s: %s | %d | %s", route.name,
-                            route.forward and "Output" or "Monitor", route.count,
+                            route.forward and "Output" or "Capture only", route.count,
                             #bytes > 0 and table.concat(bytes, " ") or "--")
                     end
                 end
             end
             -- Add current indicator
-            if not port.destination and midiHandler.getCurrentOutputPortIndex() == port.index then
+            if port.index ~= nil and midiHandler.getCurrentOutputPortIndex() == port.index then
                 displayName = displayName .. " (Current)"
                 love.graphics.setColor(0.7, 1, 0.7, 1)
             end
@@ -187,7 +193,10 @@ end
 local function activateSelection()
     local selected = midiPorts[selectedIndex]
     if not selected then return end
-    if selected.destination then
+    if selected.monitor then
+        M.hide()
+        if onShowMonitor then onShowMonitor() end
+    elseif selected.destination then
         for _, route in ipairs(midiHandler.getDestinationRoutes()) do
             if route.mask == selected.destination then
                 midiHandler.setDestinationRoute(route.mask, not route.forward)

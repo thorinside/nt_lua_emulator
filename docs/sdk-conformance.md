@@ -113,14 +113,27 @@ loaded script's own Bypass, numeric, scaled, and enum parameters.
   feature-detect the emulated SDK baseline.
 - MIDI destination masks are honored as four logical routes: Breakout (1),
   Select Bus (2), USB (4), and Internal (8). F4 opens the output-port chooser
-  plus a live per-destination monitor (count and latest hexadecimal bytes).
-  Click/Enter on a route toggles selected-host-output versus monitor-only;
-  route choices persist in `config.json`. External routes default to the
-  selected port, Internal defaults to monitor-only with **no automatic
-  loopback**. Multiple forwarded bits send only once to the shared host port.
-  Monitoring works without native MIDI support or an open port; the last 128
-  messages are retained by `midiHandler.getOutputHistory()`. This does not
-  create four separate hardware transports.
+  and route configuration (counts/latest bytes remain visible). Click/Enter
+  toggles host output versus capture-only; choices persist in `config.json`.
+  External routes default to the selected port, Internal to capture-only with
+  **no automatic loopback**. Multiple forwarded bits send only once to the
+  shared host port. F4 does not suppress hardware keyboard shortcuts.
+- F5, the status badge, or F4's "Open live MIDI event log" entry opens a
+  non-modal, draggable log. Each call is **one row**, with aligned time,
+  destination, decoded message, hexadecimal bytes, and delivery-result
+  columns. Hover a row for full details; Pause freezes only the view (capture
+  and script execution continue), scroll pauses/browses history, and Clear
+  resets history/counts. Buttons, pots, and encoders outside the panel remain
+  usable while watching MIDI. The latest 128 calls are retained, including
+  invalid calls and mask 0 (no destinations); the log explains these cases
+  rather than silently showing no traffic. Capture is independent of native
+  MIDI support or an open output port. This is an output-call log, not an
+  incoming MIDI monitor or four independent physical transports.
+- MIDI input filtering dispatches all six documented types: `note`, `cc`,
+  `bend`, `aftertouch`, `poly pressure`, and `program change`. A configured
+  channel parameter of 0 disables input, 1–16 selects that channel; omitting
+  `channelParameter` accepts all channels. Scripts can send/echo from
+  `midiMessage` and see the resulting output calls in F5.
 
 ## Algorithm indexing and fixture data
 
@@ -142,7 +155,7 @@ the algorithm count is derived from the table, not hard-coded.
 Load `scripts/api_simulation_demo.lua` with F2. It mirrors input 1 to output 1
 with controllable Gain/Mode and discoverable Bypass. Pots select page/parameter
 and adjust its value. Button 1 cycles display views, button 2 sends a MIDI
-clock tick to all logical destinations (inspect with F4), button 3 writes and
+clock tick to all logical destinations (inspect with F5), button 3 writes and
 reads a virtual I2C register, and button 4 exits the custom UI. Processing is
 still paused by Bypass; display controls remain usable.
 
@@ -155,9 +168,27 @@ lua tests/test_nt_api.lua
 lua tests/test_simulated_parameters.lua
 lua tests/test_api_simulation.lua
 lua tests/test_midi_routing.lua
+lua tests/test_midi_monitor.lua
 lua tests/test_text_formatting.lua
 lua tests/test_ui_script_callbacks.lua
 lua tests/test_control_scheduler.lua
 ```
 
 The same tests are also run under LuaJIT, matching the runtime used by LÖVE.
+
+For the actual application/UI workflow (requires LÖVE, Python 3, and rsync):
+
+```sh
+tests/run_love_midi_workflow.sh
+# Or: LOVE_BIN=/path/to/love tests/run_love_midi_workflow.sh
+```
+
+The runner creates disposable copies, never changes your state/config or sends
+physical MIDI, and runs with both an unavailable native library and a fake
+native port. It drives the real `love.keypressed`, release, mouse, and wheel
+handlers to test F4/F5 navigation, held-note release across F4, mouse buttons,
+pots/encoders while monitoring, continuous `step` output, pause/clear/scroll/
+drag, reload, rejected calls, and all six MIDI-input callback filters. It also
+checks fake host forwarding/deduplication and capture with no output port.
+Logs and screenshots (normal, empty, diagnostics) are retained in the printed
+temporary directory. Actual physical MIDI device delivery is not tested.

@@ -54,7 +54,8 @@ A comprehensive emulator for developing and testing Lua scripts for the Expert S
 2. Choose from available MIDI input devices
 3. MIDI messages will be routed to scripts that support MIDI input
 4. Scripts can define MIDI channel filtering and message type support
-5. Press **F4** to choose an output port and monitor Breakout/Select Bus/USB/Internal destinations. Click a route to toggle host output or monitor-only; monitoring also works without MIDI hardware.
+5. Press **F4** to choose an output port and configure Breakout/Select Bus/USB/Internal routes. Click a route to toggle host output or capture-only.
+6. Press **F5** (or click the MIDI status badge) for the non-modal live output log. It shows one row per call with time, destination, decoded message, bytes, and delivery result. Buttons/pots stay usable; pause, scroll, clear, or drag the log as needed. Capture works without MIDI hardware, and rejected calls are explained.
 
 ### API Simulation
 
@@ -93,7 +94,8 @@ See [SDK conformance and simulation limits](docs/sdk-conformance.md) for details
 
 - **F2**: Open script selection dialog
 - **F3**: Open MIDI input device selection dialog
-- **F4**: Open MIDI output routing and monitor dialog
+- **F4**: Open MIDI output routing dialog
+- **F5**: Toggle non-modal MIDI output event log
 - **Alt+F4** / **Cmd+Q**: Quit the application
 - **Arrow keys**: Navigate in file selection dialog
 - **Enter**: Confirm selection in dialogs
@@ -167,7 +169,7 @@ Scripts can include MIDI support by:
        -- other fields...
        midi = {
            channelParameter = parameterIndex, -- Parameter controlling MIDI channel
-           messages = {"note"}                -- Supported message types
+           messages = {"note", "cc", "bend", "aftertouch", "poly pressure", "program change"}
        }
    }
    ```
@@ -175,7 +177,8 @@ Scripts can include MIDI support by:
 3. MIDI messages are passed as tables with three values: `{status, data1, data2}`
    - Status byte includes both message type and channel
    - For note messages: `{0x90, note_number, velocity}` (note on)
-   - Channel filtering is handled automatically based on the script's channel parameter
+   - Channel filtering is handled automatically based on the script's channel parameter (1–16); a configured value of 0 disables MIDI input, matching the NT manual.
+   - If no `channelParameter` is supplied, all input channels are accepted.
 
 ## Developing Scripts
 
