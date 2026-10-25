@@ -809,18 +809,8 @@ function M.update(dt)
     -- 1) Set up the display canvas for script drawing
     display.clear()
 
-    -- Start drawing to display's canvas with clean state
-    love.graphics.push("all")
-    love.graphics.setCanvas(display.getConfig().canvas)
-    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
-
-    -- Draw script content to display canvas with error handling
-    scriptManager.callScriptDraw()
-    -- Commented out: M.lastDrawTime = currentTime
-
-    -- Reset canvas state
-    love.graphics.setCanvas()
-    love.graphics.pop()
+    local drawn, drawError = display.drawToCanvas(scriptManager.callScriptDraw)
+    if not drawn then showErrorNotification("Display error: " .. tostring(drawError)) end
     -- Commented out: end
 
     -- Always render the display at full frame rate
@@ -1398,18 +1388,8 @@ function M.draw()
     -- 1) Set up the display canvas for script drawing
     display.clear()
 
-    -- Start drawing to display's canvas with clean state
-    love.graphics.push("all")
-    love.graphics.setCanvas(display.getConfig().canvas)
-    love.graphics.clear(0, 0, 0, 1) -- Ensure canvas is completely cleared
-
-    -- Draw script content to display canvas with error handling
-    scriptManager.callScriptDraw()
-    -- Commented out: M.lastDrawTime = currentTime
-
-    -- Reset canvas state
-    love.graphics.setCanvas()
-    love.graphics.pop()
+    local drawn, drawError = display.drawToCanvas(scriptManager.callScriptDraw)
+    if not drawn then showErrorNotification("Display error: " .. tostring(drawError)) end
         lastScriptDrawTime = currentTime
     end
 

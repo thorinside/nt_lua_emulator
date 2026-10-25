@@ -5,6 +5,9 @@ local display = {
     _DESCRIPTION = "Display simulator for hardware modules"
 }
 
+-- Script loading replaces the global debug table with a logging function.
+local traceback = debug.traceback
+
 -- Default configuration
 local config = {
     width = 256,
@@ -158,8 +161,14 @@ function display.drawLine(x1, y1, x2, y2, color)
     love.graphics.pop()
 end
 
+-- Firmware accepts numeric values as text; absent enum entries render blank.
+local function textValue(value)
+    return value == nil and "" or tostring(value)
+end
+
 -- Draw text
 function display.drawText(x, y, text, color, alignment)
+    text = textValue(text)
     love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])
@@ -242,6 +251,23 @@ function display.render()
     love.graphics.pop()
 end
 
+-- Always unwind script-created graphics pushes, including those abandoned by
+-- a caught draw error. Otherwise the outer pop can restore the script canvas
+-- and LÖVE will crash when presenting the next frame.
+function display.drawToCanvas(callback)
+    local depth = love.graphics.getStackDepth()
+    local previousCanvas = love.graphics.getCanvas()
+    love.graphics.push("all")
+    local success, result = xpcall(function()
+        love.graphics.setCanvas(config.canvas)
+        love.graphics.clear(0, 0, 0, 1)
+        return callback()
+    end, traceback)
+    while love.graphics.getStackDepth() > depth do love.graphics.pop() end
+    love.graphics.setCanvas(previousCanvas)
+    return success, result
+end
+
 -- Update the display (does nothing, but provided for API completeness)
 function display.update(dt)
     -- Nothing to do here, but can be used for animations or other timed effects
@@ -252,6 +278,7 @@ function display.getConfig() return config end
 
 -- Draw text with tiny font (using tom-thumb.bdf)
 function display.drawTinyText(x, y, text, color, alignment)
+    text = textValue(text)
     love.graphics.push("all")
     local col = calculateColor(color or 15)
     love.graphics.setColor(col[1], col[2], col[3])

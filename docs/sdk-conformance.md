@@ -90,7 +90,10 @@ loaded script's own Bypass, numeric, scaled, and enum parameters.
   selected parameter, formatted values, enum labels, and units. The standard
   parameter-line helpers use the same formatting. These are emulator views,
   not pixel-identical firmware GUIs, and `drawAlgorithmUI` does not recursively
-  invoke the loaded script's own `draw` callback.
+  invoke the loaded script's own `draw` callback. `drawText`/`drawTinyText`
+  accept numbers directly and render missing (`nil`) text as blank, including
+  absent enum strings. Drawing failures unwind the graphics stack and restore
+  the previous canvas so a script error cannot leave LÖVE unable to present.
 - `standardPot1Turn` selects a six-parameter page; `standardPot2Turn` selects
   within it; `standardPot3Turn` changes the selected value with directional
   soft takeover. Its first event anchors the position without jumping; later
