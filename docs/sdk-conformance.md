@@ -11,7 +11,7 @@ Baseline: Expert Sleepers Lua scripting manual v1.17, stored in
 - Algorithm discovery: `findAlgorithm`, `getAlgorithmCount`,
   `getAlgorithmName`, and `getCurrentAlgorithm`.
 - Parameter access: `findParameter`, `focusParameter`, `getCurrentParameter`,
-  `getParameter`, `getParameterCount`, `getParameterName`, `setParameter`, and
+  `getParameter`, `getParameterCount`, `getParameterInfo`, `getParameterName`, `setParameter`, and
   `setParameterNormalized`.
 - Drawing: integer and smooth primitives, both text fonts and alignments,
   standard/specific parameter lines, and algorithm UI placeholders.
@@ -22,6 +22,49 @@ Baseline: Expert Sleepers Lua scripting manual v1.17, stored in
   `trigger`, or `gate`.
 - UI-script event callbacks use the firmware signature without an injected
   `self`; algorithm callbacks retain `self`.
+
+## Parameter metadata (v1.19)
+
+`getParameterInfo(algorithmIndex, parameterIndex)` returns `name`, `min`,
+`max`, `def`, `unit`, `scaling`, and `enumStrings`, as documented in the
+[v1.19 manual](https://www.expert-sleepers.co.uk/downloads/manuals/disting_NT_lua_scripting_1.19.pdf).
+Use the same indices as `getParameter` or those returned by `findParameter`:
+algorithm indices are zero-based; parameter indices include the script's
+`parameterOffset`. Invalid or unmodeled indices return `nil`.
+
+Ranges and defaults are raw integers, not scaled display values. `unit` and
+`scaling` are numeric firmware metadata codes (for example, enum unit is 1,
+volts is 13, and scaling is 0/1/2/3 for none/10/100/1000), not the emulator's
+script-definition constants. `enumStrings` is a fresh array (empty for numeric
+parameters). Script enum ranges retain their one-based script definitions.
+The loaded script (algorithm 0) exposes Bypass at index 1, followed by its
+own parameters at `parameterOffset + 1` (normally index 2). Enumerate with
+`for index = 1, getParameterCount(0) do ... end`; `getParameterName`,
+`getParameterInfo`, `findParameter`, `getParameter`, `setParameter`, and
+`setParameterNormalized` use the same indices. Script parameter writes update
+`self.parameters` and the existing parameter controls. Bypass does not occupy
+an entry in `self.parameters`.
+
+```lua
+local alg = getCurrentAlgorithm()
+local bypass = findParameter(alg, "Bypass")
+print(getParameterInfo(alg, bypass).enumStrings[1]) -- Off
+setParameter(alg, bypass, 1) -- bypass on
+setParameter(alg, bypass, 0) -- resume
+```
+
+Bypass pauses `step`, `gate`, `trigger`, and `midiMessage`; outputs retain their
+last values. Drawing and UI controls remain active so the script can unbypass
+itself. This is a processing-pause simulation, not hardware audio routing.
+Other firmware system parameters (program choice/routing) are not modeled;
+scripts should retain the default `parameterOffset = 1` for a contiguous list.
+
+Reverb, Delay, Filter, and VCO are representative parameter fixtures, not
+DSP simulations or exact firmware parameter catalogs. Each includes Bypass,
+realistic ranges/defaults, numeric units, and working clamped writes; examples
+include scaled Decay/Pitch and enumerated Type/Waveform. Values reset on script
+load. Load `scripts/parameter_info_demo.lua` with F2 to inspect and control the
+loaded script's own Bypass, numeric, scaled, and enum parameters.
 
 ## Emulator boundaries
 
@@ -47,6 +90,7 @@ Run the conformance suite with either supported host runtime:
 
 ```sh
 lua tests/test_nt_api.lua
+lua tests/test_simulated_parameters.lua
 lua tests/test_text_formatting.lua
 lua tests/test_ui_script_callbacks.lua
 lua tests/test_control_scheduler.lua

@@ -227,7 +227,7 @@ end
 
 -- Call the script's step function
 function M.callScriptStep(dt, inputValues)
-    if not script or not script.step then return nil end
+    if not script or script._emulatorBypassed or not script.step then return nil end
     local result = M.safeScriptCall(script.step, script, dt, inputValues)
     return result
 end
@@ -267,19 +267,19 @@ end
 
 -- Call the script's gate function
 function M.callScriptGate(params)
-    if not script or not script.gate then return nil end
+    if not script or script._emulatorBypassed or not script.gate then return nil end
     return M.safeScriptCall(script.gate, script, params.input, params.rising)
 end
 
 -- Call the script's trigger function
 function M.callScriptTrigger(params)
-    if not script or not script.trigger then return nil end
+    if not script or script._emulatorBypassed or not script.trigger then return nil end
     return M.safeScriptCall(script.trigger, script, params.input)
 end
 
 -- Call the script's midiMessage function
 function M.callScriptMidiMessage(msg)
-    if not script or not script.midiMessage then return nil end
+    if not script or script._emulatorBypassed or not script.midiMessage then return nil end
     return M.safeScriptCall(script.midiMessage, script, msg)
 end
 

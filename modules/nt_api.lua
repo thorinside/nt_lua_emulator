@@ -5,6 +5,14 @@ local M = {}
 local unpackValues = table.unpack or unpack
 local UINT32 = 4294967296
 
+-- Firmware metadata codes differ from the emulator's script-facing constants.
+local unitCodes = {
+    none = 0, kNone = 0, dB = 2, dB_minInf = 3, percent = 4,
+    Hz = 5, semitones = 6, cents = 7, ms = 8, seconds = 9,
+    frames = 10, midi_note = 11, millivolts = 12, bpm = 14
+}
+local scalingCodes = {[1] = 0, [10] = 1, [100] = 2, [1000] = 3}
+
 local function integer(value)
     if type(value) ~= "number" then return nil end
     return math.floor(value)
@@ -59,7 +67,11 @@ function M.create(options)
 
         if algorithmIndex == 0 then
             local loadedScript = script()
-            local offset = loadedScript and loadedScript.parameterOffset or 0
+            local offset = loadedScript and (loadedScript.parameterOffset or 1) or 0
+            if globalIndex and parameterIndex <= offset then
+                return algorithm.systemParams and algorithm.systemParams[parameterIndex],
+                       parameterIndex, true
+            end
             local index = globalIndex and parameterIndex - offset or parameterIndex + 1
             return scriptParameters()[index], index
         end
@@ -95,12 +107,47 @@ function M.create(options)
     function api.getParameterCount(algorithmIndex)
         local algorithm = algorithmAt(algorithmIndex)
         if not algorithm then return nil end
-        return #(algorithmIndex == 0 and scriptParameters() or algorithm.params or {})
+        if algorithmIndex == 0 then
+            return #(algorithm.systemParams or {}) + #scriptParameters()
+        end
+        return #(algorithm.params or {})
     end
 
     function api.getParameterName(algorithmIndex, parameterIndex)
-        local parameter = parameterAt(algorithmIndex, parameterIndex, false)
+        local parameter = parameterAt(algorithmIndex, parameterIndex, true)
         return parameter and parameter.name or nil
+    end
+
+    function api.getParameterInfo(algorithmIndex, parameterIndex)
+        if integer(algorithmIndex) ~= algorithmIndex or
+            integer(parameterIndex) ~= parameterIndex or
+            algorithmIndex == nil or parameterIndex == nil or
+            algorithmIndex < 0 or parameterIndex < 1 then return nil end
+        local parameter = parameterAt(algorithmIndex, parameterIndex, true)
+        if not parameter then return nil end
+
+        local enumStrings = {}
+        for i, value in ipairs(parameter.enumStrings or parameter.values or {}) do
+            enumStrings[i] = value
+        end
+        local unit = parameter.unit
+        -- kVolts is represented by 1 in the emulator, not firmware unit 13.
+        if parameter.type == "enum" or #enumStrings > 0 then
+            unit = 1
+        elseif unit == 1 and parameter.scaling == nil then
+            unit = 13
+        elseif type(unit) ~= "number" then
+            unit = unitCodes[unit] or 0
+        end
+        return {
+            name = parameter.name,
+            min = parameter.min,
+            max = parameter.max,
+            def = parameter.def or parameter.default or parameter.min,
+            unit = unit,
+            scaling = parameter.scaling or scalingCodes[parameter.scale or 1] or 0,
+            enumStrings = enumStrings
+        }
     end
 
     function api.findParameter(algorithmIndex, name)
@@ -110,8 +157,13 @@ function M.create(options)
                            (algorithmAt(algorithmIndex).params or {})
         local loadedScript = script()
         local offset = algorithmIndex == 0 and loadedScript and
-                           loadedScript.parameterOffset or 0
+                           (loadedScript.parameterOffset or 1) or 0
 
+        if algorithmIndex == 0 then
+            for index, parameter in ipairs(algorithmAt(0).systemParams or {}) do
+                if parameter.name == name then matches[#matches + 1] = index end
+            end
+        end
         for index, parameter in ipairs(params) do
             local parameterName = parameter.name
             local baseName = parameterName and parameterName:match("^%d+:(.+)$")
@@ -128,7 +180,7 @@ function M.create(options)
         if current ~= nil then return current end
         local loadedScript = script()
         if algorithmIndex == 0 and loadedScript and #scriptParameters() > 0 then
-            return loadedScript.parameterOffset + 1
+            return (loadedScript.parameterOffset or 1) + 1
         end
         return api.getParameterCount(algorithmIndex) > 0 and 1 or 0
     end
@@ -140,25 +192,29 @@ function M.create(options)
     end
 
     function api.getParameter(algorithmIndex, parameterIndex)
-        local parameter, index = parameterAt(algorithmIndex, parameterIndex, true)
+        local parameter, index, system = parameterAt(algorithmIndex, parameterIndex, true)
         if not parameter then return nil end
-        if algorithmIndex == 0 then
+        if algorithmIndex == 0 and not system then
             local loadedScript = script()
             return loadedScript and loadedScript.parameters and
                        loadedScript.parameters[index] or nil
         end
-        return parameter.current ~= nil and parameter.current or parameter.default
+        local value = parameter.current
+        if value == nil then value = parameter.default or parameter.def or parameter.min end
+        return value / (10 ^ (parameter.scaling or 0))
     end
 
     local function setParameterValue(algorithmIndex, parameterIndex, value, normalized)
-        local parameter = parameterAt(algorithmIndex, parameterIndex, true)
+        local parameter, _, system = parameterAt(algorithmIndex, parameterIndex, true)
         if not parameter or type(value) ~= "number" then return false end
 
         if normalized then
             value = math.max(0, math.min(1, value))
             value = parameter.min + value * (parameter.max - parameter.min)
-        elseif algorithmIndex == 0 and parameter.type == "float" then
+        elseif algorithmIndex == 0 and not system and parameter.type == "float" then
             value = value * (parameter.scale or 1)
+        else
+            value = value * (10 ^ (parameter.scaling or 0))
         end
 
         value = math.max(parameter.min, math.min(parameter.max, value))
@@ -168,8 +224,12 @@ function M.create(options)
             value = math.floor(value + 0.5)
         end
         parameter.current = value
+        if algorithmIndex == 0 and system and parameter.name == "Bypass" then
+            local loadedScript = script()
+            if loadedScript then loadedScript._emulatorBypassed = value ~= 0 end
+        end
 
-        if algorithmIndex == 0 then
+        if algorithmIndex == 0 and not system then
             local loadedScript = script()
             if loadedScript then helpers.updateScriptParameters(scriptParameters(), loadedScript) end
         end

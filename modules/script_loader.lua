@@ -139,30 +139,7 @@ function M.loadScript(scriptPath, createDefaultMappings)
             _G.getCurrentParameter = function() return 0 end
             
             -- Simulated algorithms for testing (mimicking real Disting NT algorithms)
-            local simulatedAlgorithms = {
-                {name = "EmulatedScript", params = newScriptParameters or {}},
-                {name = "Reverb", params = {
-                    {name = "Mix", min = 0, max = 100},
-                    {name = "Decay", min = 0, max = 100},
-                    {name = "Damping", min = 0, max = 100},
-                    {name = "Pre-delay", min = 0, max = 100}
-                }},
-                {name = "Delay", params = {
-                    {name = "Time", min = 0, max = 100},
-                    {name = "Feedback", min = 0, max = 100},
-                    {name = "Mix", min = 0, max = 100}
-                }},
-                {name = "Filter", params = {
-                    {name = "Cutoff", min = 0, max = 100},
-                    {name = "Resonance", min = 0, max = 100},
-                    {name = "Type", min = 0, max = 3}
-                }},
-                {name = "VCO", params = {
-                    {name = "Pitch", min = -60, max = 60},
-                    {name = "Waveform", min = 0, max = 4},
-                    {name = "PWM", min = 0, max = 100}
-                }}
-            }
+            local simulatedAlgorithms = require("modules.simulated_algorithms").create()
             
             -- Update the first algorithm's params with current script params
             simulatedAlgorithms[1].params = newScriptParameters or {}

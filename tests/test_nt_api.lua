@@ -111,7 +111,7 @@ local documentedFunctions = {
     "focusParameter", "getAlgorithmCount", "getAlgorithmName",
     "getBusVoltage", "getCpuCycleCount", "getCurrentAlgorithm",
     "getCurrentParameter", "getFirmwareVersion", "getParameter",
-    "getParameterCount", "getParameterName", "sendI2CCommand",
+    "getParameterCount", "getParameterInfo", "getParameterName", "sendI2CCommand",
     "sendI2CGetter", "sendMIDI", "setDisplayMode", "setParameter",
     "setParameterNormalized", "standardPot1Turn", "standardPot2Turn",
     "standardPot3Turn"
@@ -127,6 +127,62 @@ assertEqual(api.findParameter(0, "Speed"), 2, "script parameter offset")
 local mode1, mode2 = api.findParameter(0, "Mode")
 assertEqual(mode1, 3, "first prefixed parameter")
 assertEqual(mode2, 4, "second prefixed parameter")
+
+local info = api.getParameterInfo(0, api.findParameter(0, "Speed"))
+assertEqual(info.name, "Speed", "metadata uses global script parameter index")
+assertEqual(info.min, 0, "raw minimum")
+assertEqual(info.max, 100, "raw maximum")
+assertEqual(info.def, 50, "raw default")
+assertEqual(info.unit, 0, "default unit")
+assertEqual(info.scaling, 1, "firmware scaling code for kBy10")
+assertEqual(#info.enumStrings, 0, "numeric enum strings")
+assertEqual(api.getParameterInfo(0, 1), nil, "unmodeled system parameter")
+assertEqual(api.getParameterInfo(99, 1), nil, "invalid algorithm")
+assertEqual(api.getParameterInfo(1, 99), nil, "invalid parameter")
+assertEqual(api.getParameterInfo(nil, nil), nil, "missing indices")
+assertEqual(api.getParameterInfo(1, "1"), nil, "invalid index type")
+assertEqual(api.getParameterInfo(1.5, 1), nil, "fractional algorithm")
+assertEqual(api.getParameterInfo(1, 0), nil, "zero parameter index")
+assertEqual(api.getParameterInfo(1, 1).name, "Mix", "other algorithm metadata")
+
+require("modules.constants")
+local metadataParameters = helpers.parseScriptParameters({
+    {"Voltage", -100, 100, 0, kVolts, kBy100},
+    {"Level", -6000, 0, -1200, kDb, kBy1000},
+    {"Mode", {"Off", "On"}, 1},
+    {"Amount", 0, 100, 25, kPercent}
+})
+local metadataApi = nt_api.create({
+    display = display,
+    helpers = helpers,
+    getAlgorithms = function()
+        return {{name = "Script"}, {name = "Bypass test", params = {
+            {name = "Bypass", min = 0, max = 1, def = 0, unit = 1,
+             scaling = 0, enumStrings = {"Off", "On"}}
+        }}}
+    end,
+    getScriptParameters = function() return metadataParameters end
+})
+local voltage = metadataApi.getParameterInfo(0, 1)
+assertEqual(voltage.unit, 13, "firmware voltage unit")
+assertEqual(voltage.scaling, 2, "firmware scaling code for kBy100")
+assertEqual(voltage.def, 0, "zero default")
+local level = metadataApi.getParameterInfo(0, 2)
+assertEqual(level.unit, 2, "firmware dB unit")
+assertEqual(level.scaling, 3, "firmware scaling code for kBy1000")
+local mode = metadataApi.getParameterInfo(0, 3)
+assertEqual(mode.unit, 1, "enum unit")
+assertEqual(mode.enumStrings[1], "Off", "first enum string")
+assertEqual(mode.enumStrings[2], "On", "second enum string")
+mode.enumStrings[1] = "Changed"
+assertEqual(metadataApi.getParameterInfo(0, 3).enumStrings[1], "Off",
+            "metadata does not expose mutable enum storage")
+assertEqual(metadataApi.getParameterInfo(0, 4).unit, 4, "firmware percent unit")
+local bypass = metadataApi.getParameterInfo(1, 1)
+assertEqual(bypass.name, "Bypass", "native metadata name")
+assertEqual(bypass.unit, 1, "native enum metadata")
+assertEqual(bypass.def, 0, "native default metadata")
+assertEqual(bypass.enumStrings[1], "Off", "native enum strings")
 
 assertEqual(api.getParameter(0, 2), 5, "scaled parameter read")
 api.setParameter(0, 2, 7.5, false)
